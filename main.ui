@@ -14,7 +14,7 @@
    <string>SampleBrowser</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QGridLayout" name="gridLayout" rowstretch="0,10">
+   <layout class="QGridLayout" name="gridLayout" rowstretch="0,10,0">
     <item row="1" column="0">
      <widget class="QSplitter" name="splitter">
       <property name="orientation">
@@ -112,6 +112,25 @@
       </item>
      </layout>
     </item>
+    <item row="2" column="0">
+     <widget class="QGraphicsView" name="waveView">
+      <property name="maximumSize">
+       <size>
+        <width>16777215</width>
+        <height>100</height>
+       </size>
+      </property>
+      <property name="verticalScrollBarPolicy">
+       <enum>Qt::ScrollBarAlwaysOff</enum>
+      </property>
+      <property name="horizontalScrollBarPolicy">
+       <enum>Qt::ScrollBarAlwaysOff</enum>
+      </property>
+      <property name="renderHints">
+       <set>QPainter::Antialiasing|QPainter::TextAntialiasing</set>
+      </property>
+     </widget>
+    </item>
    </layout>
   </widget>
   <widget class="QMenuBar" name="menubar">
@@ -126,6 +145,12 @@
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
+ <tabstops>
+  <tabstop>sampleView</tabstop>
+  <tabstop>fsView</tabstop>
+  <tabstop>volumeSlider</tabstop>
+  <tabstop>volumeSpin</tabstop>
+ </tabstops>
  <resources/>
  <connections>
   <connection>
