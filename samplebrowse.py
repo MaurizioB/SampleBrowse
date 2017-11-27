@@ -196,6 +196,9 @@ class SamplePlayer(QtGui.QMainWindow):
         self.sampleRate = self.player.sampleRate
         self.dtype = self.player.dtype
 
+        self.volumeSpin.valueChanged.connect(self.setVolumeSpinColor)
+        self.volumeSlider.mousePressEvent = self.volumeSliderMousePressEvent
+
         self.fsModel = QtGui.QFileSystemModel()
         self.fsModel.setFilter(QtCore.QDir.AllDirs|QtCore.QDir.NoDotAndDotDot)
         self.proxyModel = QtGui.QSortFilterProxyModel()
@@ -311,6 +314,20 @@ class SamplePlayer(QtGui.QMainWindow):
             self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
 
+    def volumeSliderMousePressEvent(self, event):
+        if event.button() == QtCore.Qt.MidButton:
+            self.volumeSpin.setValue(100)
+        else:
+            QtGui.QSlider.mousePressEvent(self.volumeSlider, event)
+
+    def setVolumeSpinColor(self, value):
+        palette = self.volumeSpin.palette()
+        if value > 100:
+            palette.setColor(palette.Text, QtCore.Qt.red)
+        else:
+            palette.setColor(palette.Text, QtGui.QPalette().color(palette.Active, palette.Text))
+        self.volumeSpin.setPalette(palette)
+
     def playToggle(self, index):
         if not index.isValid():
             self.player.stop()
@@ -335,7 +352,7 @@ class SamplePlayer(QtGui.QMainWindow):
         waveData = fileItem.data(WaveRole)
         if info.channels == 1:
             waveData = waveData.repeat(2, axis=1)/2
-        waveData *= self.volumeSpin.value()/100.
+        waveData = waveData * self.volumeSpin.value()/100.
         self.currentSampleIndex = fileIndex
         self.waveScene.movePlayhead(0)
         self.player.play(waveData.tostring())
