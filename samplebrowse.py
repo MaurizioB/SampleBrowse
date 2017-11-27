@@ -13,6 +13,7 @@ availableExtensions = tuple('*.' + f for f in availableFormats)
 FilePathRole = QtCore.Qt.UserRole + 1
 InfoRole = FilePathRole + 1
 WaveRole = InfoRole + 1
+PreviewRole = WaveRole + 1
 
 class AlignItemDelegate(QtGui.QStyledItemDelegate):
     def __init__(self, alignment):
@@ -22,6 +23,7 @@ class AlignItemDelegate(QtGui.QStyledItemDelegate):
     def paint(self, painter, option, index):
         option.displayAlignment = self.alignment
         return QtGui.QStyledItemDelegate.paint(self, painter, option, index)
+
 
 class SampleControlDelegate(QtGui.QStyledItemDelegate):
     controlClicked = QtCore.pyqtSignal(object)
@@ -54,14 +56,20 @@ class WaveScene(QtGui.QGraphicsScene):
         self.waveRect = QtCore.QRectF()
         self.wavePen = QtGui.QPen(QtCore.Qt.NoPen)
         self.zeroPen = QtGui.QPen(QtCore.Qt.lightGray)
-        self.playHeader = QtGui.QGraphicsLineItem()
 
-    def moveHeader(self, pos):
-        self.playHeader.setX(pos)
+    def showPlayhead(self):
+        self.playhead.show()
 
-    def drawWave(self, left, right, dtype):
+    def hidePlayhead(self):
+        self.playhead.hide()
+
+    def movePlayhead(self, pos):
+        self.playhead.setX(pos)
+
+    def drawWave(self, data, dtype):
+        left, right = data
         self.clear()
-        self.playHeader = self.addLine(-50, -2, -50, 4)
+        self.playhead = self.addLine(-50, -2, -50, 4)
         path = QtGui.QPainterPath()
         pos = 0
         path.moveTo(0, 0)
@@ -180,13 +188,14 @@ class SamplePlayer(QtGui.QMainWindow):
         uic.loadUi('main.ui', self)
         self.player = Player(self)
         self.player.stopped.connect(self.stopped)
-        self.player.output.notify.connect(self.moveHeader)
+        self.player.output.notify.connect(self.movePlayhead)
         self.playerThread = QtCore.QThread()
         self.player.moveToThread(self.playerThread)
         self.playerThread.started.connect(self.player.run)
         self.sampleSize = self.player.sampleSize
         self.sampleRate = self.player.sampleRate
         self.dtype = self.player.dtype
+
         self.fsModel = QtGui.QFileSystemModel()
         self.fsModel.setFilter(QtCore.QDir.AllDirs|QtCore.QDir.NoDotAndDotDot)
         self.proxyModel = QtGui.QSortFilterProxyModel()
@@ -217,12 +226,15 @@ class SamplePlayer(QtGui.QMainWindow):
 
         self.waveScene = WaveScene()
         self.waveView.setScene(self.waveScene)
+        self.player.stopped.connect(self.waveScene.hidePlayhead)
+        self.player.started.connect(self.waveScene.showPlayhead)
 
         self.browse()
         self.splitter.setStretchFactor(0, 10)
         self.splitter.setStretchFactor(1, 15)
 
         self.currentSampleIndex = None
+        self.currentShownSampleIndex = None
         self.shown = False
         self.playerThread.start()
 
@@ -315,59 +327,68 @@ class SamplePlayer(QtGui.QMainWindow):
             return
         self.player.stop()
         fileIndex = index.sibling(index.row(), 0)
+        #showWave also loads waveData
+        #might want to launch it in a separated thread or something else whenever a database will be added?
         self.showWave(fileIndex)
         fileItem = self.sampleModel.itemFromIndex(fileIndex)
         info = fileIndex.data(InfoRole)
-        data = fileItem.data(WaveRole)
-        if data is None:
-            with soundfile.SoundFile(fileItem.data(FilePathRole).toString()) as sf:
-                data = sf.read(always_2d=True, dtype=self.dtype)
-            fileItem.setData(data, WaveRole)
+        waveData = fileItem.data(WaveRole)
         if info.channels == 1:
-            data = data.repeat(2, axis=1)/2
-        data *= self.volumeSpin.value()/100.
+            waveData = waveData.repeat(2, axis=1)/2
+        waveData *= self.volumeSpin.value()/100.
         self.currentSampleIndex = fileIndex
-        self.waveScene.moveHeader(0)
-        self.player.play(data.tostring())
+        self.waveScene.movePlayhead(0)
+        self.player.play(waveData.tostring())
         fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-stop'))
 
-    def moveHeader(self):
+    def movePlayhead(self):
 #        bytesInBuffer = self.output.bufferSize() - self.output.bytesFree()
 #        usInBuffer = 1000000. * bytesInBuffer / (2 * self.sampleSize / 8) / self.sampleRate
-#        self.waveScene.moveHeader((self.output.processedUSecs() - usInBuffer) / 200)
-        self.waveScene.moveHeader(self.waveScene.playHeader.x() + self.sampleRate / 200.)
+#        self.waveScene.movePlayhead((self.output.processedUSecs() - usInBuffer) / 200)
+        self.waveScene.movePlayhead(self.waveScene.playhead.x() + self.sampleRate / 200.)
 
     def stopped(self):
         if self.currentSampleIndex:
             self.sampleModel.itemFromIndex(self.currentSampleIndex).setData(QtGui.QIcon.fromTheme('media-playback-start'), QtCore.Qt.DecorationRole)
             self.currentSampleIndex = None
-            self.waveScene.moveHeader(-50)
+#            self.waveScene.movePlayhead(-50)
+
+    def getWaveData(self, filePath):
+        with soundfile.SoundFile(filePath) as sf:
+            waveData = sf.read(always_2d=True, dtype=self.dtype)
+        return waveData
 
     def showWave(self, index):
+        if self.currentShownSampleIndex and self.currentShownSampleIndex == index:
+            return
         fileIndex = index.sibling(index.row(), 0)
         info = fileIndex.data(InfoRole)
-        data = fileIndex.data(WaveRole)
-        if data is None:
-            fileItem = self.sampleModel.itemFromIndex(fileIndex)
-            with soundfile.SoundFile(fileItem.data(FilePathRole)) as sf:
-                data = sf.read(always_2d=True, dtype=self.dtype)
-            fileItem.setData(data, WaveRole)
-        ratio = 100
-        if info.channels > 1:
-            left = data[:, 0]
-            leftMin = np.amin(np.pad(left, (0, ratio - left.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
-            leftMax = np.amax(np.pad(left, (0, ratio - left.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
-            right = data[:, 1]
-            rightMin = np.amin(np.pad(right, (0, ratio - right.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
-            rightMax = np.amax(np.pad(right, (0, ratio - right.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
-            rightData = rightMax, rightMin
-        else:
-            leftMin = np.amin(np.pad(data, (0, ratio - data.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
-            leftMax = np.amax(np.pad(data, (0, ratio - data.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
-            rightData = None
-        leftData = leftMax, leftMin
-        self.waveScene.drawWave(leftData, rightData, self.dtype)
+        previewData = fileIndex.data(PreviewRole)
+        if not previewData:
+            waveData = fileIndex.data(WaveRole)
+            if waveData is None:
+                fileItem = self.sampleModel.itemFromIndex(fileIndex)
+                waveData = self.getWaveData(fileItem.data(FilePathRole))
+                fileItem.setData(waveData, WaveRole)
+            ratio = 100
+            if info.channels > 1:
+                left = waveData[:, 0]
+                leftMin = np.amin(np.pad(left, (0, ratio - left.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
+                leftMax = np.amax(np.pad(left, (0, ratio - left.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
+                right = waveData[:, 1]
+                rightMin = np.amin(np.pad(right, (0, ratio - right.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
+                rightMax = np.amax(np.pad(right, (0, ratio - right.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
+                rightData = rightMax, rightMin
+            else:
+                leftMin = np.amin(np.pad(waveData, (0, ratio - waveData.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
+                leftMax = np.amax(np.pad(waveData, (0, ratio - waveData.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
+                rightData = None
+            leftData = leftMax, leftMin
+            previewData = leftData, rightData
+            fileItem.setData(previewData, PreviewRole)
+        self.waveScene.drawWave(previewData, self.dtype)
         self.waveView.fitInView(self.waveScene.waveRect)
+        self.currentShownSampleIndex = fileIndex
 
     def resizeEvent(self, event):
         self.waveView.fitInView(self.waveScene.waveRect)
