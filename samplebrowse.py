@@ -212,9 +212,17 @@ class SamplePlayer(QtGui.QMainWindow):
 #        self.fsView.setRootIndex(self.fsModel.index(QtCore.QDir.currentPath()))
         self.fsView.setCurrentIndex(self.proxyModel.mapFromSource(self.fsModel.index(QtCore.QDir.currentPath())))
         self.fsView.doubleClicked.connect(self.dirChanged)
+        self.fsView.customContextMenuRequested.connect(self.fsViewContextMenu)
+
+        self.favouritesModel = QtGui.QStandardItemModel()
+        self.favouritesModel.setHorizontalHeaderLabels(['Name', 'Path'])
+        self.favouritesTable.setModel(self.favouritesModel)
+        self.favouritesTable.doubleClicked.connect(self.browseFromFavourites)
+        self.favouritesTable.clicked.connect(self.browseFromFavourites)
+        self.favouritesTable.horizontalHeader().setStretchLastSection(True)
+
         self.sampleModel = QtGui.QStandardItemModel()
         self.sampleView.setModel(self.sampleModel)
-
         self.alignRightDelegate = AlignItemDelegate(QtCore.Qt.AlignVCenter|QtCore.Qt.AlignRight)
         self.alignCenterDelegate = AlignItemDelegate(QtCore.Qt.AlignCenter)
         self.sampleView.setItemDelegateForColumn(1, self.alignRightDelegate)
@@ -233,8 +241,8 @@ class SamplePlayer(QtGui.QMainWindow):
         self.player.started.connect(self.waveScene.showPlayhead)
 
         self.browse()
-        self.splitter.setStretchFactor(0, 10)
-        self.splitter.setStretchFactor(1, 15)
+        self.mainSplitter.setStretchFactor(0, 10)
+        self.mainSplitter.setStretchFactor(1, 15)
 
         self.currentSampleIndex = None
         self.currentShownSampleIndex = None
@@ -256,19 +264,25 @@ class SamplePlayer(QtGui.QMainWindow):
         if event.key() == QtCore.Qt.Key_Space:
             if not self.player.isPlaying():
                 if self.sampleView.currentIndex().isValid():
-                    self.playToggle(self.sampleView.currentIndex())
+                    self.play(self.sampleView.currentIndex())
                     self.sampleView.setCurrentIndex(self.sampleView.currentIndex())
             else:
                 if self.sampleModel.rowCount() <= 1:
                     self.player.stop()
                 else:
-                    if self.currentSampleIndex.row() == self.sampleModel.rowCount() - 1:
-                        next = self.currentSampleIndex.sibling(0, 0)
+                    if event.modifiers() == QtCore.Qt.ShiftModifier:
+                        if self.currentSampleIndex.row() == 0:
+                            next = self.currentSampleIndex.sibling(self.sampleModel.rowCount() -1, 0)
+                        else:
+                            next = self.currentSampleIndex.sibling(self.currentSampleIndex.row() - 1, 0)
                     else:
-                        next = self.currentSampleIndex.sibling(self.currentSampleIndex.row() + 1, 0)
+                        if self.currentSampleIndex.row() == self.sampleModel.rowCount() - 1:
+                            next = self.currentSampleIndex.sibling(0, 0)
+                        else:
+                            next = self.currentSampleIndex.sibling(self.currentSampleIndex.row() + 1, 0)
                     self.sampleView.setCurrentIndex(next)
                     self.play(next)
-        elif event.key() == QtCore.Qt.Key_Period:
+        elif event.key() in (QtCore.Qt.Key_Period, QtCore.Qt.Key_Escape):
             self.player.stop()
         else:
             QtGui.QTableView.keyPressEvent(self.sampleView, event)
@@ -279,10 +293,21 @@ class SamplePlayer(QtGui.QMainWindow):
             self.fsModel.fetchMore(index.sibling(row, 0))
         self.fsModel.fetchMore(self.fsModel.index(path))
 
-    def highlightCurrent(self, path):
-        if path == QtCore.QDir.currentPath():
-            self.fsView.scrollTo(self.proxyModel.mapFromSource(self.fsModel.index(QtCore.QDir.currentPath())))
-            self.fsModel.directoryLoaded.disconnect(self.highlightCurrent)
+    def fsViewContextMenu(self, pos):
+        dirIndex = self.fsView.indexAt(pos)
+        menu = QtGui.QMenu()
+        addDirAction = QtGui.QAction('Add "{}" to favourites'.format(dirIndex.data()), menu)
+        menu.addAction(addDirAction)
+        res = menu.exec_(self.fsView.mapToGlobal(pos))
+        if res == addDirAction:
+            dirLabelItem = QtGui.QStandardItem(dirIndex.data())
+            dirPathItem = QtGui.QStandardItem(self.fsModel.filePath(self.proxyModel.mapToSource(dirIndex)))
+            dirPathItem.setFlags(dirPathItem.flags() ^ QtCore.Qt.ItemIsEditable)
+            self.favouritesModel.appendRow([dirLabelItem, dirPathItem])
+
+    def browseFromFavourites(self, index):
+        dirPathIndex = index.sibling(index.row(), 1)
+        self.browse(dirPathIndex.data())
 
     def dirChanged(self, index):
         self.browse(self.fsModel.filePath(self.proxyModel.mapToSource(index)))
