@@ -2,6 +2,7 @@
 # *-* coding: utf-8 *-*
 
 import sys
+from Queue import Queue
 from PyQt4 import QtCore, QtGui, QtMultimedia, uic
 import soundfile
 import numpy as np
@@ -107,11 +108,85 @@ class WaveScene(QtGui.QGraphicsScene):
         self.waveRect = QtCore.QRectF(0, -1, leftPath.boundingRect().width(), 4)
 
 
-class Player(QtGui.QMainWindow):
+class Player(QtCore.QObject):
+    stateChanged = QtCore.pyqtSignal(object)
+    notify = QtCore.pyqtSignal()
+    started = QtCore.pyqtSignal()
+    stopped = QtCore.pyqtSignal()
+    paused = QtCore.pyqtSignal()
+
+    def __init__(self, main, audioDevice=None):
+        QtCore.QObject.__init__(self)
+        self.main = main
+
+        self.audioDevice = audioDevice if audioDevice else QtMultimedia.QAudioDeviceInfo.defaultOutputDevice()
+        self.sampleSize = 32 if 32 in self.audioDevice.supportedSampleSizes() else 16
+        self.sampleRate = 48000 if 48000 in self.audioDevice.supportedSampleRates() else 44100
+
+        format = QtMultimedia.QAudioFormat()
+        format.setFrequency(self.sampleRate)
+        format.setChannels(2)
+        format.setSampleSize(self.sampleSize)
+        format.setCodec('audio/pcm')
+        format.setByteOrder(QtMultimedia.QAudioFormat.LittleEndian)
+        format.setSampleType(QtMultimedia.QAudioFormat.Float if self.sampleSize >= 32 else QtMultimedia.QAudioFormat.SignedInt)
+
+        self.output = QtMultimedia.QAudioOutput(format)
+        self.output.setNotifyInterval(50)
+        self.output.stateChanged.connect(self.stateChanged)
+        self.output.notify.connect(self.notify)
+        self.dtype = 'float32' if self.sampleSize >= 32 else 'int16'
+
+        self.audioQueue = Queue()
+        self.audioBufferArray = QtCore.QBuffer(self)
+
+    def isPlaying(self):
+        return True if self.output.state() == QtMultimedia.QAudio.ActiveState else False
+
+    def stateChanged(self, state):
+        if state in (QtMultimedia.QAudio.StoppedState, QtMultimedia.QAudio.IdleState):
+            self.stopped.emit()
+        elif state == QtMultimedia.QAudio.ActiveState:
+            self.started.emit()
+        else:
+            self.paused.emit()
+
+    def run(self):
+        while True:
+            res = self.audioQueue.get()
+            if res == -1:
+                break
+            self.output.stop()
+            self.audioBufferArray.close()
+            self.audioBufferArray.setData(res)
+            self.audioBufferArray.open(QtCore.QIODevice.ReadOnly)
+            self.audioBufferArray.seek(0)
+            self.output.start(self.audioBufferArray)
+        self.output.stop()
+
+    def quit(self):
+        self.audioQueue.put(-1)
+
+    def stop(self):
+        self.output.stop()
+
+    def play(self, array):
+        self.audioQueue.put(array)
+
+
+class SamplePlayer(QtGui.QMainWindow):
     def __init__(self):
         QtGui.QMainWindow.__init__(self)
         uic.loadUi('main.ui', self)
-        self.setup()
+        self.player = Player(self)
+        self.player.stopped.connect(self.stopped)
+        self.player.output.notify.connect(self.moveHeader)
+        self.playerThread = QtCore.QThread()
+        self.player.moveToThread(self.playerThread)
+        self.playerThread.started.connect(self.player.run)
+        self.sampleSize = self.player.sampleSize
+        self.sampleRate = self.player.sampleRate
+        self.dtype = self.player.dtype
         self.fsModel = QtGui.QFileSystemModel()
         self.fsModel.setFilter(QtCore.QDir.AllDirs|QtCore.QDir.NoDotAndDotDot)
         self.proxyModel = QtGui.QSortFilterProxyModel()
@@ -149,6 +224,7 @@ class Player(QtGui.QMainWindow):
 
         self.currentSampleIndex = None
         self.shown = False
+        self.playerThread.start()
 
     def showEvent(self, event):
         if not self.shown:
@@ -161,18 +237,15 @@ class Player(QtGui.QMainWindow):
             self.resize(640, 480)
             self.shown = True
 
-    def isPlaying(self):
-        return True if self.output.state() == QtMultimedia.QAudio.ActiveState else False
-
     def sampleViewKeyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Space:
-            if not self.isPlaying():
+            if not self.player.isPlaying():
                 if self.sampleView.currentIndex().isValid():
                     self.playToggle(self.sampleView.currentIndex())
                     self.sampleView.setCurrentIndex(self.sampleView.currentIndex())
             else:
                 if self.sampleModel.rowCount() <= 1:
-                    self.output.stop()
+                    self.player.stop()
                 else:
                     if self.currentSampleIndex.row() == self.sampleModel.rowCount() - 1:
                         next = self.currentSampleIndex.sibling(0, 0)
@@ -181,27 +254,9 @@ class Player(QtGui.QMainWindow):
                     self.sampleView.setCurrentIndex(next)
                     self.play(next)
         elif event.key() == QtCore.Qt.Key_Period:
-            if self.isPlaying():
-                self.output.stop()
+            self.player.stop()
         else:
             QtGui.QTableView.keyPressEvent(self.sampleView, event)
-
-    def setup(self):
-        self.audioDevice = QtMultimedia.QAudioDeviceInfo.defaultOutputDevice()
-        self.sampleSize = 32 if 32 in self.audioDevice.supportedSampleSizes() else 16
-        self.sampleRate = 48000 if 48000 in self.audioDevice.supportedSampleRates() else 44100
-        format = QtMultimedia.QAudioFormat()
-        format.setFrequency(self.sampleRate)
-        format.setChannels(2)
-        format.setSampleSize(self.sampleSize)
-        format.setCodec('audio/pcm')
-        format.setByteOrder(QtMultimedia.QAudioFormat.LittleEndian)
-        format.setSampleType(QtMultimedia.QAudioFormat.Float if self.sampleSize >= 32 else QtMultimedia.QAudioFormat.SignedInt)
-        self.output = QtMultimedia.QAudioOutput(format)
-        self.output.setNotifyInterval(50)
-        self.output.stateChanged.connect(self.stateChanged)
-        self.output.notify.connect(self.moveHeader)
-        self.dtype = 'float32' if self.sampleSize >= 32 else 'int16'
 
     def cleanFolders(self, path):
         index = self.fsModel.index(path)
@@ -240,27 +295,25 @@ class Player(QtGui.QMainWindow):
             self.sampleModel.appendRow([fileItem, lengthItem, formatItem, rateItem, channelsItem])
         self.sampleView.resizeColumnsToContents()
         self.sampleView.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
-#        self.sampleView.horizontalHeader().setMinimumSectionSize(100)
         for c in xrange(1, 5):
             self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
 
     def playToggle(self, index):
         if not index.isValid():
-            self.output.stop()
+            self.player.stop()
             return
         fileIndex = index.sibling(index.row(), 0)
-        if self.currentSampleIndex and self.currentSampleIndex == fileIndex and self.isPlaying():
-            self.output.stop()
+        if self.currentSampleIndex and self.currentSampleIndex == fileIndex and self.player.isPlaying():
+            self.player.stop()
         else:
             self.play(index)
 
     def play(self, index):
         if not index.isValid():
-            self.output.stop()
+            self.player.stop()
             return
-        if self.isPlaying():
-            self.output.stop()
+        self.player.stop()
         fileIndex = index.sibling(index.row(), 0)
         self.showWave(fileIndex)
         fileItem = self.sampleModel.itemFromIndex(fileIndex)
@@ -270,32 +323,27 @@ class Player(QtGui.QMainWindow):
             with soundfile.SoundFile(unicode(fileItem.data(FilePathRole).toString())) as sf:
                 data = sf.read(always_2d=True, dtype=self.dtype)
             fileItem.setData(data, WaveRole)
-        array = QtCore.QByteArray()
         if info.channels == 1:
             data = data.repeat(2, axis=1)/2
         data *= self.volumeSpin.value()/100.
-        array.append(data.tostring())
-        buffer = QtCore.QBuffer(self)
-        buffer.setData(array)
-        buffer.open(QtCore.QIODevice.ReadOnly)
-        buffer.seek(0)
         self.currentSampleIndex = fileIndex
-        self.waveScene.moveHeader(-50)
-        self.output.start(buffer)
+        self.waveScene.moveHeader(0)
+        self.player.play(data.tostring())
         fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-stop'))
 
     def moveHeader(self):
+#        bytesInBuffer = self.output.bufferSize() - self.output.bytesFree()
+#        usInBuffer = 1000000. * bytesInBuffer / (2 * self.sampleSize / 8) / self.sampleRate
+#        self.waveScene.moveHeader((self.output.processedUSecs() - usInBuffer) / 200)
         self.waveScene.moveHeader(self.waveScene.playHeader.x() + self.sampleRate / 200.)
 
-    def stateChanged(self, state):
-        if state in (QtMultimedia.QAudio.StoppedState, QtMultimedia.QAudio.IdleState) and self.currentSampleIndex:
+    def stopped(self):
+        if self.currentSampleIndex:
             self.sampleModel.itemFromIndex(self.currentSampleIndex).setData(QtGui.QIcon.fromTheme('media-playback-start'), QtCore.Qt.DecorationRole)
             self.currentSampleIndex = None
             self.waveScene.moveHeader(-50)
 
     def showWave(self, index):
-        if self.isPlaying():
-            return
         fileIndex = index.sibling(index.row(), 0)
         info = fileIndex.data(InfoRole).toPyObject()
         data = fileIndex.data(WaveRole).toPyObject()
@@ -330,7 +378,7 @@ def main():
 #    app.setQuitOnLastWindowClosed(False)
 #    DBusQtMainLoop(set_as_default=True)
 
-    player = Player()
+    player = SamplePlayer()
     player.show()
     sys.exit(app.exec_())
 
