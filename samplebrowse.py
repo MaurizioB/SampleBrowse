@@ -1,8 +1,8 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 # *-* coding: utf-8 *-*
 
 import sys
-from Queue import Queue
+from queue import Queue
 from PyQt4 import QtCore, QtGui, QtMultimedia, uic
 import soundfile
 import numpy as np
@@ -192,7 +192,7 @@ class SamplePlayer(QtGui.QMainWindow):
         self.proxyModel = QtGui.QSortFilterProxyModel()
         self.proxyModel.setSourceModel(self.fsModel)
         self.fsView.setModel(self.proxyModel)
-        for c in xrange(1, self.fsModel.columnCount()):
+        for c in range(1, self.fsModel.columnCount()):
             self.fsView.hideColumn(c)
         self.fsModel.setRootPath(QtCore.QDir.currentPath())
         self.fsModel.directoryLoaded.connect(self.cleanFolders)
@@ -206,7 +206,7 @@ class SamplePlayer(QtGui.QMainWindow):
         self.alignRightDelegate = AlignItemDelegate(QtCore.Qt.AlignVCenter|QtCore.Qt.AlignRight)
         self.alignCenterDelegate = AlignItemDelegate(QtCore.Qt.AlignCenter)
         self.sampleView.setItemDelegateForColumn(1, self.alignRightDelegate)
-        for c in xrange(2, 5):
+        for c in range(2, 5):
             self.sampleView.setItemDelegateForColumn(c, self.alignCenterDelegate)
         self.sampleControlDelegate = SampleControlDelegate()
         self.sampleControlDelegate.controlClicked.connect(self.playToggle)
@@ -260,7 +260,7 @@ class SamplePlayer(QtGui.QMainWindow):
 
     def cleanFolders(self, path):
         index = self.fsModel.index(path)
-        for row in xrange(self.fsModel.rowCount(index)):
+        for row in range(self.fsModel.rowCount(index)):
             self.fsModel.fetchMore(index.sibling(row, 0))
         self.fsModel.fetchMore(self.fsModel.index(path))
 
@@ -276,8 +276,8 @@ class SamplePlayer(QtGui.QMainWindow):
         self.sampleModel.clear()
         self.sampleModel.setHorizontalHeaderLabels(['Name', 'Length', 'Format', 'Rate', 'Ch.'])
         for fileInfo in QtCore.QDir(path).entryInfoList(availableExtensions, QtCore.QDir.Files):
-            filePath = unicode(fileInfo.absoluteFilePath())
-            fileName = unicode(fileInfo.fileName())
+            filePath = fileInfo.absoluteFilePath()
+            fileName = fileInfo.fileName()
 #            if fileName.lower().endswith(availableFormats):
             fileItem = QtGui.QStandardItem(fileName)
             fileItem.setData(filePath, FilePathRole)
@@ -286,7 +286,7 @@ class SamplePlayer(QtGui.QMainWindow):
                 info = soundfile.info(filePath)
                 fileItem.setData(info, InfoRole)
             except Exception as e:
-                print e
+#                print e
                 continue
             lengthItem = QtGui.QStandardItem('{:.3f}'.format(float(info.frames) / info.samplerate))
             formatItem = QtGui.QStandardItem(info.format)
@@ -295,7 +295,7 @@ class SamplePlayer(QtGui.QMainWindow):
             self.sampleModel.appendRow([fileItem, lengthItem, formatItem, rateItem, channelsItem])
         self.sampleView.resizeColumnsToContents()
         self.sampleView.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
-        for c in xrange(1, 5):
+        for c in range(1, 5):
             self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
 
@@ -317,10 +317,10 @@ class SamplePlayer(QtGui.QMainWindow):
         fileIndex = index.sibling(index.row(), 0)
         self.showWave(fileIndex)
         fileItem = self.sampleModel.itemFromIndex(fileIndex)
-        info = fileIndex.data(InfoRole).toPyObject()
-        data = fileItem.data(WaveRole).toPyObject()
+        info = fileIndex.data(InfoRole)
+        data = fileItem.data(WaveRole)
         if data is None:
-            with soundfile.SoundFile(unicode(fileItem.data(FilePathRole).toString())) as sf:
+            with soundfile.SoundFile(fileItem.data(FilePathRole).toString()) as sf:
                 data = sf.read(always_2d=True, dtype=self.dtype)
             fileItem.setData(data, WaveRole)
         if info.channels == 1:
@@ -345,11 +345,11 @@ class SamplePlayer(QtGui.QMainWindow):
 
     def showWave(self, index):
         fileIndex = index.sibling(index.row(), 0)
-        info = fileIndex.data(InfoRole).toPyObject()
-        data = fileIndex.data(WaveRole).toPyObject()
+        info = fileIndex.data(InfoRole)
+        data = fileIndex.data(WaveRole)
         if data is None:
             fileItem = self.sampleModel.itemFromIndex(fileIndex)
-            with soundfile.SoundFile(unicode(fileItem.data(FilePathRole).toString())) as sf:
+            with soundfile.SoundFile(fileItem.data(FilePathRole)) as sf:
                 data = sf.read(always_2d=True, dtype=self.dtype)
             fileItem.setData(data, WaveRole)
         ratio = 100
