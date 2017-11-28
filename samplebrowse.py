@@ -3,7 +3,7 @@
 
 import sys
 from queue import Queue
-from PyQt4 import QtCore, QtGui, QtMultimedia, uic
+from PyQt4 import QtCore, QtGui, QtMultimedia, QtSql, uic
 import soundfile
 import numpy as np
 
@@ -116,6 +116,57 @@ class WaveScene(QtGui.QGraphicsScene):
         self.waveRect = QtCore.QRectF(0, -1, leftPath.boundingRect().width(), 4)
 
 
+class UpArrowIcon(QtGui.QIcon):
+    def __init__(self):
+        pm = QtGui.QPixmap(12, 12)
+        pm.fill(QtCore.Qt.transparent)
+        qp = QtGui.QPainter(pm)
+        qp.setRenderHints(QtGui.QPainter.Antialiasing)
+        path = QtGui.QPainterPath()
+        path.moveTo(2, 8)
+        path.lineTo(6, 2)
+        path.lineTo(10, 8)
+        qp.drawPath(path)
+        del qp
+        QtGui.QIcon.__init__(self, pm)
+
+
+class DownArrowIcon(QtGui.QIcon):
+    def __init__(self):
+        pm = QtGui.QPixmap(12, 12)
+        pm.fill(QtCore.Qt.transparent)
+        qp = QtGui.QPainter(pm)
+        qp.setRenderHints(QtGui.QPainter.Antialiasing)
+        path = QtGui.QPainterPath()
+        path.moveTo(2, 2)
+        path.lineTo(6, 8)
+        path.lineTo(10, 2)
+        qp.drawPath(path)
+        del qp
+        QtGui.QIcon.__init__(self, pm)
+
+
+class VerticalDownToggleBtn(QtGui.QToolButton):
+    def __init__(self, *args, **kwargs):
+        QtGui.QToolButton.__init__(self, *args, **kwargs)
+        self.upIcon = UpArrowIcon()
+        self.downIcon = DownArrowIcon()
+        self.setMaximumSize(16, 16)
+        self.setIcon(self.downIcon)
+
+    def toggle(self, value):
+        if value:
+            self.setDown()
+        else:
+            self.setUp()
+
+    def setDown(self):
+        self.setIcon(self.downIcon)
+
+    def setUp(self):
+        self.setIcon(self.upIcon)
+
+
 class Player(QtCore.QObject):
     stateChanged = QtCore.pyqtSignal(object)
     notify = QtCore.pyqtSignal()
@@ -186,6 +237,7 @@ class SamplePlayer(QtGui.QMainWindow):
     def __init__(self):
         QtGui.QMainWindow.__init__(self)
         uic.loadUi('main.ui', self)
+        self.settings = QtCore.QSettings()
         self.player = Player(self)
         self.player.stopped.connect(self.stopped)
         self.player.output.notify.connect(self.movePlayhead)
@@ -196,9 +248,41 @@ class SamplePlayer(QtGui.QMainWindow):
         self.sampleRate = self.player.sampleRate
         self.dtype = self.player.dtype
 
+        self.browseSelectGroup.setId(self.browseSystemBtn, 0)
+        self.browseSelectGroup.setId(self.browseDbBtn, 1)
         self.volumeSpin.valueChanged.connect(self.setVolumeSpinColor)
         self.volumeSlider.mousePressEvent = self.volumeSliderMousePressEvent
 
+        self.browserStackedWidget = QtGui.QWidget()
+        self.browserStackedLayout = QtGui.QStackedLayout()
+        self.browserStackedWidget.setLayout(self.browserStackedLayout)
+        self.mainSplitter.insertWidget(0, self.browserStackedWidget)
+        
+        self.fsSplitter = QtGui.QSplitter(QtCore.Qt.Vertical)
+        self.browserStackedLayout.addWidget(self.fsSplitter)
+        self.fsView = QtGui.QTreeView()
+        self.fsView.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.fsView.setHeaderHidden(True)
+        self.fsSplitter.addWidget(self.fsView)
+        self.favouriteWidget = QtGui.QWidget()
+        self.fsSplitter.addWidget(self.favouriteWidget)
+        favouriteLayout = QtGui.QGridLayout()
+        self.favouriteWidget.setLayout(favouriteLayout)
+        favouriteHeaderLayout = QtGui.QHBoxLayout()
+        favouriteLayout.addLayout(favouriteHeaderLayout, 0, 0)
+        favouriteHeaderLayout.addWidget(QtGui.QLabel('Favourites'))
+        favouriteHeaderLayout.addStretch()
+        self.favouritesToggleBtn = VerticalDownToggleBtn()
+        favouriteHeaderLayout.addWidget(self.favouritesToggleBtn)
+        favouriteHeaderLayout.addSpacing(5)
+        self.favouritesTable = QtGui.QTableView()
+        self.favouritesTable.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.favouritesTable.setSelectionBehavior(self.favouritesTable.SelectRows)
+        self.favouritesTable.setSortingEnabled(True)
+        self.favouritesTable.horizontalHeader().setHighlightSections(False)
+        self.favouritesTable.verticalHeader().setVisible(False)
+        favouriteLayout.addWidget(self.favouritesTable)
+        
         self.fsModel = QtGui.QFileSystemModel()
         self.fsModel.setFilter(QtCore.QDir.AllDirs|QtCore.QDir.NoDotAndDotDot)
         self.proxyModel = QtGui.QSortFilterProxyModel()
@@ -217,10 +301,21 @@ class SamplePlayer(QtGui.QMainWindow):
         self.favouritesModel = QtGui.QStandardItemModel()
         self.favouritesModel.setHorizontalHeaderLabels(['Name', 'Path'])
         self.favouritesTable.setModel(self.favouritesModel)
-        self.favouritesTable.doubleClicked.connect(self.browseFromFavourites)
-        self.favouritesTable.clicked.connect(self.browseFromFavourites)
+        self.favouritesTable.mousePressEvent = self.favouritesTableMousePressEvent
         self.favouritesTable.horizontalHeader().setStretchLastSection(True)
+        self.loadFavourites()
+        self.favouritesModel.dataChanged.connect(self.favouritesDataChanged)
+        self.favouritesToggleBtn.clicked.connect(self.favouritesToggle)
 
+        self.dbWidget = QtGui.QWidget()
+        dbLayout = QtGui.QGridLayout()
+        self.dbWidget.setLayout(dbLayout)
+        self.dbTreeView = QtGui.QTreeView()
+        dbLayout.addWidget(self.dbTreeView)
+        self.browserStackedLayout.addWidget(self.dbWidget)
+        self.loadDb()
+
+        self.browseSelectGroup.buttonClicked[int].connect(self.browserStackedLayout.setCurrentIndex)
         self.sampleModel = QtGui.QStandardItemModel()
         self.sampleView.setModel(self.sampleModel)
         self.alignRightDelegate = AlignItemDelegate(QtCore.Qt.AlignVCenter|QtCore.Qt.AlignRight)
@@ -243,11 +338,29 @@ class SamplePlayer(QtGui.QMainWindow):
         self.browse()
         self.mainSplitter.setStretchFactor(0, 10)
         self.mainSplitter.setStretchFactor(1, 15)
+        self.fsSplitter.setStretchFactor(0, 50)
+        self.fsSplitter.setStretchFactor(1, 1)
 
         self.currentSampleIndex = None
         self.currentShownSampleIndex = None
         self.shown = False
         self.playerThread.start()
+
+    def loadDb(self):
+        return
+        self.sampleDb = QtSql.QSqlDatabase.addDatabase('QSQLITE')
+        self.sampleDb.close()
+        dataDir = QtCore.QDir(QtGui.QDesktopServices.storageLocation(QtGui.QDesktopServices.DataLocation))
+        dbFile = QtCore.QFile(dataDir.filePath('sample.sqlite'))
+        if not dbFile.exists():
+            if not dataDir.exists():
+                dataDir.mkpath(dataDir.absolutePath())
+        self.sampleDb.setDatabaseName(dbFile.fileName())
+        self.sampleDb.open()
+        self.sampleDb.exec_('create table samples(fileName varchar(128) primary key, length int, tags varchar(256))')
+        for x in range(256):
+            self.sampleDb.exec('insert into samples values("asdf{}", 5232, "gnang gneoir")'.format(x))
+        self.sampleDb.close()
 
     def showEvent(self, event):
         if not self.shown:
@@ -295,19 +408,92 @@ class SamplePlayer(QtGui.QMainWindow):
 
     def fsViewContextMenu(self, pos):
         dirIndex = self.fsView.indexAt(pos)
+        dirPath = self.fsModel.filePath(self.proxyModel.mapToSource(dirIndex))
+
         menu = QtGui.QMenu()
         addDirAction = QtGui.QAction('Add "{}" to favourites'.format(dirIndex.data()), menu)
+        for row in range(self.favouritesModel.rowCount()):
+            dirPathItem = self.favouritesModel.item(row, 1)
+            if dirPathItem.text() == dirPath:
+                addDirAction.setEnabled(False)
+                break
+
         menu.addAction(addDirAction)
         res = menu.exec_(self.fsView.mapToGlobal(pos))
         if res == addDirAction:
             dirLabelItem = QtGui.QStandardItem(dirIndex.data())
-            dirPathItem = QtGui.QStandardItem(self.fsModel.filePath(self.proxyModel.mapToSource(dirIndex)))
+            dirPathItem = QtGui.QStandardItem(dirPath)
+            dirPathItem.setFlags(dirPathItem.flags() ^ QtCore.Qt.ItemIsEditable)
+            self.favouritesModel.dataChanged.disconnect(self.favouritesDataChanged)
+            self.favouritesModel.appendRow([dirLabelItem, dirPathItem])
+            self.favouritesModel.dataChanged.connect(self.favouritesDataChanged)
+            self.settings.beginGroup('Favourites')
+            self.settings.setValue(dirIndex.data(), dirPath)
+            self.settings.endGroup()
+
+    def favouritesDataChanged(self, index, _):
+        dirPathIndex = index.sibling(index.row(), 1)
+        dirLabel = index.sibling(index.row(), 0).data()
+        dirPath = dirPathIndex.data()
+        self.settings.beginGroup('Favourites')
+        for fav in self.settings.childKeys():
+            if self.settings.value(fav) == dirPath:
+                self.settings.remove(fav)
+                self.settings.setValue(dirLabel, dirPath)
+                break
+        else:
+            self.settings.setValue(dirLabel, dirPath)
+        self.settings.endGroup()
+        
+
+    def loadFavourites(self):
+        self.settings.beginGroup('Favourites')
+        for fav in self.settings.childKeys():
+            dirLabelItem = QtGui.QStandardItem(fav)
+            dirPathItem = QtGui.QStandardItem(self.settings.value(fav))
             dirPathItem.setFlags(dirPathItem.flags() ^ QtCore.Qt.ItemIsEditable)
             self.favouritesModel.appendRow([dirLabelItem, dirPathItem])
+        self.settings.endGroup()
 
     def browseFromFavourites(self, index):
+        if not index.isValid():
+            return
         dirPathIndex = index.sibling(index.row(), 1)
         self.browse(dirPathIndex.data())
+
+    def favouritesTableMousePressEvent(self, event):
+        index = self.favouritesTable.indexAt(event.pos())
+        if event.button() != QtCore.Qt.RightButton:
+            self.browseFromFavourites(index)
+            return QtGui.QTableView.mousePressEvent(self.favouritesTable, event)
+        if not index.isValid():
+            return
+        QtGui.QTableView.mousePressEvent(self.favouritesTable, event)
+        dirPathIndex = index.sibling(index.row(), 1)
+        dirPath = dirPathIndex.data()
+        menu = QtGui.QMenu()
+        scrollToAction = QtGui.QAction('Show directory in tree', menu)
+        removeAction = QtGui.QAction('Remove from favourites', menu)
+        menu.addActions([scrollToAction, removeAction])
+        res = menu.exec_(self.favouritesTable.viewport().mapToGlobal(event.pos()))
+        if res == scrollToAction:
+            self.fsView.setCurrentIndex(self.proxyModel.mapFromSource(self.fsModel.index(dirPath)))
+            self.fsView.scrollTo(
+                self.proxyModel.mapFromSource(self.fsModel.index(dirPath)), self.fsView.PositionAtTop
+                )
+        elif res == removeAction:
+            self.settings.beginGroup('Favourites')
+            for fav in self.settings.childKeys():
+                if self.settings.value(fav) == dirPath:
+                    self.settings.remove(fav)
+                    break
+            self.favouritesModel.takeRow(index.row())
+            self.settings.endGroup()
+
+    def favouritesToggle(self):
+        visible = self.favouritesTable.isVisible()
+        self.favouritesTable.setVisible(not visible)
+        self.favouritesToggleBtn.toggle(not visible)
 
     def dirChanged(self, index):
         self.browse(self.fsModel.filePath(self.proxyModel.mapToSource(index)))
@@ -438,8 +624,8 @@ class SamplePlayer(QtGui.QMainWindow):
 
 def main():
     app = QtGui.QApplication(sys.argv)
-#    app.setQuitOnLastWindowClosed(False)
-#    DBusQtMainLoop(set_as_default=True)
+    app.setOrganizationName('jidesk')
+    app.setApplicationName('SampleBrowse')
 
     player = SamplePlayer()
     player.show()
