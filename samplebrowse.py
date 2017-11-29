@@ -27,7 +27,9 @@ class TagsEditorTextBrowser(QtGui.QTextBrowser):
 #        self.setReadOnly(False)
 
     def tags(self):
-        return re.sub(r'\,\,+', ',', self.toPlainText().replace('\n', '').strip(','))
+        tags = re.sub(r'\,\,+', ',', self.toPlainText()).replace('\n', ',').strip(',')
+        tagsSet = set(tags.split(','))
+        return ','.join(sorted(tagsSet))
 
 
 class TagsEditorDialog(QtGui.QDialog):
@@ -36,7 +38,7 @@ class TagsEditorDialog(QtGui.QDialog):
         self.setWindowTitle('Edit tags')
         layout = QtGui.QGridLayout()
         self.setLayout(layout)
-        layout.addWidget(QtGui.QLabel('Edit tags for sample "{}"'.format(filePath)))
+        layout.addWidget(QtGui.QLabel('Edit tags for sample "{}"\nTags are separated by commas.'.format(filePath)))
         self.tagsEditor = TagsEditorTextBrowser()
         self.tagsEditor.setText(tags)
         self.tagsEditor.setReadOnly(False)
@@ -54,30 +56,155 @@ class TagsEditorDialog(QtGui.QDialog):
             return res
 
 
+class AddSamplesWithTagDialog(QtGui.QDialog):
+    def __init__(self, parent, fileList):
+        QtGui.QDialog.__init__(self, parent)
+        self.setWindowTitle('Add samples to database')
+        layout = QtGui.QGridLayout()
+        self.setLayout(layout)
+        layout.addWidget(QtGui.QLabel('The following samples are about to be added to the database'))
+        sampleModel = QtGui.QStandardItemModel()
+        sampleView = QtGui.QTableView()
+        sampleView.setHorizontalScrollMode(sampleView.ScrollPerPixel)
+        sampleView.setVerticalScrollMode(sampleView.ScrollPerPixel)
+        sampleView.setMaximumHeight(100)
+        layout.addWidget(sampleView)
+        sampleView.setModel(sampleModel)
+        sampleView.setEditTriggers(sampleView.NoEditTriggers)
+        sampleView.horizontalHeader().setVisible(False)
+        sampleView.verticalHeader().setVisible(False)
+        if isinstance(fileList[0], str):
+            for filePath in fileList:
+                fileItem = QtGui.QStandardItem(QtCore.QFile(filePath).fileName())
+                filePathItem = QtGui.QStandardItem(filePath)
+                sampleModel.appendRow([fileItem, filePathItem])
+        else:
+            for index in fileList:
+                fileItem = QtGui.QStandardItem(index.data())
+                filePathItem = QtGui.QStandardItem(index.data(FilePathRole))
+                sampleModel.appendRow([fileItem, filePathItem])
+        sampleView.resizeColumnsToContents()
+        sampleView.resizeRowsToContents()
+#        sampleView.setStretchLastSection(True)
+        layout.addWidget(QtGui.QLabel('Tags that will be applied to all of them:'))
+        self.tagsEditor = TagsEditorTextBrowser()
+        self.tagsEditor.setMaximumHeight(100)
+        self.tagsEditor.setReadOnly(False)
+        layout.addWidget(self.tagsEditor)
+        self.buttonBox = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok|QtGui.QDialogButtonBox.Cancel)
+        self.buttonBox.button(self.buttonBox.Ok).clicked.connect(self.accept)
+        self.buttonBox.button(self.buttonBox.Cancel).clicked.connect(self.reject)
+        layout.addWidget(self.buttonBox)
+
+    def exec_(self):
+        res = QtGui.QDialog.exec_(self)
+        if res:
+            return self.tagsEditor.tags()
+        else:
+            return res
+
+class RemoveSamplesDialog(QtGui.QDialog):
+    def __init__(self, parent, fileList):
+        QtGui.QDialog.__init__(self, parent)
+        self.setWindowTitle('Remove samples from database')
+        layout = QtGui.QGridLayout()
+        self.setLayout(layout)
+        layout.addWidget(QtGui.QLabel('Remove the following samples from the database?'))
+        sampleModel = QtGui.QStandardItemModel()
+        sampleView = QtGui.QTableView()
+        sampleView.setHorizontalScrollMode(sampleView.ScrollPerPixel)
+        sampleView.setVerticalScrollMode(sampleView.ScrollPerPixel)
+        sampleView.setMaximumHeight(100)
+        layout.addWidget(sampleView)
+        sampleView.setModel(sampleModel)
+        sampleView.setEditTriggers(sampleView.NoEditTriggers)
+        sampleView.horizontalHeader().setVisible(False)
+        sampleView.verticalHeader().setVisible(False)
+        if isinstance(fileList[0], str):
+            for filePath in fileList:
+                fileItem = QtGui.QStandardItem(QtCore.QFile(filePath).fileName())
+                filePathItem = QtGui.QStandardItem(filePath)
+                sampleModel.appendRow([fileItem, filePathItem])
+        else:
+            for index in fileList:
+                fileItem = QtGui.QStandardItem(index.data())
+                filePathItem = QtGui.QStandardItem(index.data(FilePathRole))
+                sampleModel.appendRow([fileItem, filePathItem])
+        sampleView.resizeColumnsToContents()
+        sampleView.resizeRowsToContents()
+        self.buttonBox = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok|QtGui.QDialogButtonBox.Cancel)
+        self.buttonBox.button(self.buttonBox.Ok).clicked.connect(self.accept)
+        self.buttonBox.button(self.buttonBox.Cancel).clicked.connect(self.reject)
+        layout.addWidget(self.buttonBox)
+
 class TagsModel(QtGui.QStandardItemModel):
     def __init__(self, db, *args, **kwargs):
         QtGui.QStandardItemModel.__init__(self, *args, **kwargs)
         self.db = db
+        self.totalCountItem = QtGui.QStandardItem('0')
+        self.appendRow([QtGui.QStandardItem('All samples'), self.totalCountItem])
+        self.tags = set()
 
     def setTags(self, tags):
+        tags = set(tags)
+        try:
+            tags.remove('')
+        except:
+            pass
+        self.db.execute('SELECT COUNT(*) FROM samples')
+        self.totalCountItem.setText(str(self.db.fetchall()[0][0]))
         for tag in tags:
             self.checkAndCreateTags(tag.split('/'), 0)
+        currentTags = self.tags & tags
+        #check for removed tags
+        for tag in self.tags ^ currentTags:
+            self.clearTag(tag.split('/'), 0)
+        self.tags = tags
 
-    def checkAndCreateTags(self, tagTree, depth, parentItem=None):
+    def clearTag(self, tagTree, depth, parentItem=None):
+#        return
         if parentItem is None:
             parentItem = self
             parentIndex = self.index(0, 0)
         else:
             parentIndex = self.index(0, 0, parentItem.index())
         childTag = tagTree[depth]
+        childItemMatch = self.match(parentIndex, QtCore.Qt.DisplayRole, childTag, flags=QtCore.Qt.MatchExactly)
+        if not childItemMatch:
+            print('maccheccazz')
+            return
+        childIndex = childItemMatch[0]
+        if depth + 1 == len(tagTree):
+            childCountItem = self.itemFromIndex(childIndex.sibling(childIndex.row(), 1))
+            subtract = int(childCountItem.text())
+            childCountItem.setText('0')
+            return subtract
+        else:
+            subtract = self.clearTag(tagTree, depth + 1, self.itemFromIndex(childIndex))
+            try:
+                countItem = self.itemFromIndex(childIndex.sibling(childIndex.row(), 1))
+#                row = parentIndex.parent().row() if parentItem != self else childIndex.row()
+#                countItem = self.itemFromIndex(parentIndex.parent().sibling(parentIndex.row(), 1))
+                print(countItem.text(), subtract)
+#                countItem.setText('{}'.format(int(countItem.text()) - subtract))
+            except Exception as e:
+                print(e)
+
+    def checkAndCreateTags(self, tagTree, depth, parentItem=None):
+        if parentItem is None:
+            parentItem = self
+            parentIndex = self.index(0, 0, QtCore.QModelIndex())
+        else:
+            parentIndex = self.index(0, 0, parentItem.index())
+        childTag = tagTree[depth]
         currentTree = '/'.join(tagTree[:depth+1])
         self.db.execute('SELECT * FROM samples WHERE tags LIKE ?', ('%{}%'.format(currentTree), ))
         count = str(len(self.db.fetchall()))
-#        print('/'.join(tagTree[:depth+1]))
-        childItemMatch = self.match(parentIndex, QtCore.Qt.DisplayRole, childTag, QtCore.Qt.MatchFixedString)
+        childItemMatch = self.match(parentIndex, QtCore.Qt.DisplayRole, childTag, flags=QtCore.Qt.MatchExactly)
         if childItemMatch:
-            childItem = self.itemFromIndex(childItemMatch[0])
-            self.item(childItem.row(), 1).setText(count)
+            childIndex = childItemMatch[0]
+            childItem = self.itemFromIndex(childIndex)
+            self.itemFromIndex(childIndex.sibling(childIndex.row(), 1)).setText(count)
         else:
             childItem = QtGui.QStandardItem(childTag)
             countItem = QtGui.QStandardItem(count)
@@ -685,7 +812,12 @@ class SampleBrowse(QtGui.QMainWindow):
         selIndex = self.sampleView.indexAt(pos)
         if not selIndex.isValid():
             return
-        fileIndex = selIndex.sibling(selIndex.row(), 0)
+        if len(self.sampleView.selectionModel().selectedRows()) == 1:
+            self.singleSampleContextMenu(selIndex.sibling(selIndex.row(), 0), pos)
+        else:
+            self.multiSampleContextMenu(pos)
+
+    def singleSampleContextMenu(self, fileIndex, pos):
         fileName = fileIndex.data()
         filePath = fileIndex.data(FilePathRole)
         menu = QtGui.QMenu()
@@ -699,27 +831,102 @@ class SampleBrowse(QtGui.QMainWindow):
         res = menu.exec_(self.sampleView.viewport().mapToGlobal(pos))
         if res == addToDatabaseAction:
             info = fileIndex.data(InfoRole)
-            #fileName varchar primary key, path varchar, length float, format varchar, sampleRate int, channels int, tags varchar, preview blob
-            self.sampleDb.execute(
-                'INSERT INTO samples values (?,?,?,?,?,?,?,?)', 
-                (filePath, fileName, float(info.frames) / info.samplerate, info.format, info.samplerate, info.channels, '', None), 
-                )
-            self.sampleDbUpdated = True
-            self.dbConn.commit()
+            self.addSampleToDb(filePath, fileName, info, '', None)
         elif res == delFromDatabaseAction:
             filePath = fileIndex.data(FilePathRole)
             self.sampleDb.execute(
                 'DELETE FROM samples WHERE filePath=?', 
                 (filePath, )
                 )
-            self.sampleDbUpdated = True
             self.dbConn.commit()
             self.reloadTags()
-            self.dbModel.takeRow(selIndex.row())
+            if self.sampleView.model() == self.dbProxyModel:
+                self.dbModel.takeRow(fileIndex.row())
+            else:
+                self.sampleDbUpdated = True
 
-    def browseDb(self, query=None):
+    def multiSampleContextMenu(self, pos):
+        new = []
+        exist = []
+        for fileIndex in self.sampleView.selectionModel().selectedRows():
+            filePath = fileIndex.data(FilePathRole)
+            self.sampleDb.execute('SELECT * FROM samples WHERE filePath=?', (filePath, ))
+            if not self.sampleDb.fetchone():
+                new.append(fileIndex)
+            else:
+                exist.append(fileIndex)
+        menu = QtGui.QMenu()
+        if self.sampleView.model() == self.browseModel:
+            removeAllAction = QtGui.QAction('Remove {} existing samples from database'.format(len(exist)), menu)
+        else:
+            removeAllAction = QtGui.QAction('Remove selected samples from database', menu)
+        addAllAction = QtGui.QAction('Add selected samples to database', menu)
+        addAllActionWithTags = QtGui.QAction('Add selected samples to database with tags...', menu)
+        if new:
+            menu.addActions([addAllAction, addAllActionWithTags])
+        if exist:
+            if new:
+                sep = QtGui.QAction(menu)
+                sep.setSeparator(True)
+                menu.addAction(sep)
+            menu.addAction(removeAllAction)
+        res = menu.exec_(self.sampleView.viewport().mapToGlobal(pos))
+        if res == addAllAction:
+            self.addSampleGroupToDb(new)
+        elif res == addAllActionWithTags:
+            tags = AddSamplesWithTagDialog(self, new).exec_()
+            if isinstance(tags, str):
+                self.addSampleGroupToDb(new, tags)
+        elif res == removeAllAction:
+            if RemoveSamplesDialog(self, exist).exec_():
+                fileNames = [i.data(FilePathRole) for i in exist]
+                self.sampleDb.execute(
+                    'DELETE FROM samples WHERE filePath IN ({})'.format(','.join(['?' for i in fileNames])), 
+                    fileNames
+                    )
+                self.dbConn.commit()
+                if self.sampleView.model() == self.dbProxyModel:
+                    for index in sorted(exist, key=lambda index: index.row(), reverse=True):
+                        self.dbModel.takeRow(index.row())
+                else:
+                    self.sampleDbUpdated = True
+                self.reloadTags()
+
+    def addSampleGroupToDb(self, fileIndexes, tags=''):
+        for fileIndex in fileIndexes:
+            filePath = fileIndex.data(FilePathRole)
+            fileName = fileIndex.data()
+            info = fileIndex.data(InfoRole)
+            self._addSampleToDb(filePath, fileName, info, tags)
+        self.dbConn.commit()
+        self.reloadTags()
+        if self.sampleView.model() == self.browseModel:
+            self.sampleDbUpdated = True
+#        else:
+#            reload query
+
+    def addSampleToDb(self, filePath, fileName=None, info=None, tags='', preview=None):
+        self._addSampleToDb(filePath, fileName, info, tags, preview)
+        self.dbConn.commit()
+        self.reloadTags()
+        if self.sampleView.model() == self.browseModel:
+            self.sampleDbUpdated = True
+#        else:
+#            reload query
+
+    def _addSampleToDb(self, filePath, fileName=None, info=None, tags='', preview=None):
+        if not fileName:
+            fileName = QtCore.QFile(filePath).fileName()
+        if not info:
+            soundfile.info(filePath)
+        self.sampleDb.execute(
+            'INSERT INTO samples values (?,?,?,?,?,?,?,?)', 
+            (filePath, fileName, float(info.frames) / info.samplerate, info.format, info.samplerate, info.channels, tags, preview), 
+            )
+
+    def browseDb(self, query=None, force=True):
         if query is None:
-            if self.currentDbQuery and not self.sampleDbUpdated:
+            if not force and (self.currentDbQuery and not self.sampleDbUpdated):
                 if self.currentShownSampleIndex and self.currentShownSampleIndex.model() == self.dbModel:
                     self.sampleView.setCurrentIndex(self.currentShownSampleIndex)
                 return
@@ -756,7 +963,7 @@ class SampleBrowse(QtGui.QMainWindow):
         self.sampleDb.execute('SELECT tags FROM samples WHERE filePath=?', (filePath, ))
         tags = self.sampleDb.fetchone()[0]
         res = TagsEditorDialog(self, filePath, tags).exec_()
-        if not res:
+        if not isinstance(res, str):
             return
         tagsItem = self.sampleView.model().itemFromIndex(index)
         tagsItem.setText(res)
@@ -777,21 +984,32 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbTreeView.header().setResizeMode(1, QtGui.QHeaderView.Fixed)
 
     def dbTreeViewDoubleClicked(self, index):
+        if self.dbTreeProxyModel.mapToSource(index) == self.dbTreeModel.index(0, 0):
+            self.browseDb()
+            return
         #TODO this has to be implemented along with browseDb
         self.dbModel.clear()
         self.dbModel.setHorizontalHeaderLabels(['Name', 'Length', 'Format', 'Rate', 'Ch.', 'Tags'])
-        tag = index.data()
+        currentTag = index.data()
         current = index
         while True:
             parent = current.parent()
             if not parent.isValid():
                 break
-            tag = '{parent}/{current}'.format(parent=parent.data(), current=tag)
+            currentTag = '{parent}/{current}'.format(parent=parent.data(), current=currentTag)
             current = parent
-        self.sampleDb.execute('SELECT * FROM samples WHERE tags LIKE ?', ('%{}%'.format(tag), ))
+        hasChildren = self.dbTreeProxyModel.hasChildren(index)
+        self.sampleDb.execute('SELECT * FROM samples WHERE tags LIKE ?', ('%{}%'.format(currentTag), ))
         for row in self.sampleDb.fetchall():
             filePath, fileName, length, format, sampleRate, channels, tags, data = row
-            if not tag in tags.split(','):
+            tagList = tags.split(',')
+            if hasChildren:
+                for tag in tagList:
+                    if tag.startswith(currentTag):
+                        break
+                else:
+                    continue
+            elif not currentTag in tagList:
                 continue
             fileItem = QtGui.QStandardItem(fileName)
             fileItem.setData(filePath, FilePathRole)
