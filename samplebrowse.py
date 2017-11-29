@@ -486,7 +486,7 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbConn = sqlite3.connect(dbFile.fileName())
         self.sampleDb = self.dbConn.cursor()
         try:
-            self.sampleDb.execute('create table samples(filePath varchar primary key, fileName varchar, length float, format varchar, sampleRate int, channels int, tags varchar, preview blob)')
+            self.sampleDb.execute('CREATE table samples(filePath varchar primary key, fileName varchar, length float, format varchar, sampleRate int, channels int, tags varchar, preview blob)')
         except:
             pass
 #        for x in range(8):
@@ -687,20 +687,21 @@ class SampleBrowse(QtGui.QMainWindow):
             return
         fileIndex = selIndex.sibling(selIndex.row(), 0)
         fileName = fileIndex.data()
+        filePath = fileIndex.data(FilePathRole)
         menu = QtGui.QMenu()
         addToDatabaseAction = QtGui.QAction('Add "{}" to database'.format(fileName), menu)
         delFromDatabaseAction = QtGui.QAction('Remove "{}" from database'.format(fileName), menu)
-        if self.sampleView.model() == self.browseModel:
+        self.sampleDb.execute('SELECT * FROM samples WHERE filePath=?', (filePath, ))
+        if self.sampleView.model() == self.browseModel and not self.sampleDb.fetchone():
             menu.addAction(addToDatabaseAction)
         else:
             menu.addAction(delFromDatabaseAction)
         res = menu.exec_(self.sampleView.viewport().mapToGlobal(pos))
         if res == addToDatabaseAction:
-            filePath = fileIndex.data(FilePathRole)
             info = fileIndex.data(InfoRole)
             #fileName varchar primary key, path varchar, length float, format varchar, sampleRate int, channels int, tags varchar, preview blob
             self.sampleDb.execute(
-                'insert into samples values (?,?,?,?,?,?,?,?)', 
+                'INSERT INTO samples values (?,?,?,?,?,?,?,?)', 
                 (filePath, fileName, float(info.frames) / info.samplerate, info.format, info.samplerate, info.channels, '', None), 
                 )
             self.sampleDbUpdated = True
