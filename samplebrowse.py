@@ -25,6 +25,7 @@ dbColumns.update({
     })
 sampleViewColumns = browseColumns, dbColumns
 
+HoverRole = QtCore.Qt.UserRole + 1
 FilePathRole = QtCore.Qt.UserRole + 1
 InfoRole = FilePathRole + 1
 WaveRole = InfoRole + 1
@@ -309,12 +310,17 @@ class TagsModel(QtGui.QStandardItemModel):
             self.itemFromIndex(childIndex.sibling(childIndex.row(), 1)).setText(count)
         else:
             childItem = QtGui.QStandardItem(childTag)
+            self.db.execute('SELECT foreground,background FROM tagColors WHERE tag=?', ('/'.join(tagTree[:depth+1]), ))
+            colors = self.db.fetchone()
+            if colors:
+                childItem.setData(QtGui.QColor(colors[0]), QtCore.Qt.ForegroundRole)
+                childItem.setData(QtGui.QColor(colors[1]), QtCore.Qt.BackgroundRole)
+
             countItem = QtGui.QStandardItem(count)
             parentItem.appendRow([childItem, countItem])
 #        if len(tagTree[depth:]) > 1:
         if hasChildren:
             self.checkAndCreateTags(tagTree, depth + 1, childItem)
-
 
 class EllipsisLabel(QtGui.QLabel):
     def __init__(self, *args, **kwargs):
@@ -361,6 +367,198 @@ class SampleControlDelegate(QtGui.QStyledItemDelegate):
             if event.pos().x() > option.rect.height():
                 self.controlClicked.emit(index)
         return QtGui.QStyledItemDelegate.editorEvent(self, event, model, option, index)
+
+
+class ColorLineEdit(QtGui.QLineEdit):
+    editBtnClicked = QtCore.pyqtSignal()
+    def __init__(self, *args, **kwargs):
+        QtGui.QLineEdit.__init__(self, *args, **kwargs)
+        self.editBtn = QtGui.QPushButton('...', self)
+        self.editBtn.setCursor(QtCore.Qt.ArrowCursor)
+        self.editBtn.clicked.connect(self.editBtnClicked.emit)
+
+    def resizeEvent(self, event):
+        size = self.height() - 8
+        self.editBtn.resize(size, size)
+        self.editBtn.move(self.width() - size - 4, (self.height() - size) / 2)
+
+
+class TagColorDialog(QtGui.QDialog):
+    def __init__(self, parent, index):
+        QtGui.QDialog.__init__(self, parent)
+        layout = QtGui.QGridLayout()
+        self.setLayout(layout)
+        layout.addWidget(QtGui.QLabel('Text color:'))
+        self.foregroundColor = index.data(QtCore.Qt.ForegroundRole)
+        self.backgroundColor = index.data(QtCore.Qt.BackgroundRole)
+        self.foregroundEdit = ColorLineEdit()
+        basePalette = self.foregroundEdit.palette()
+        self.defaultForeground = basePalette.color(basePalette.Active, basePalette.Text)
+        self.defaultBackground = basePalette.color(basePalette.Active, basePalette.Base)
+        if self.foregroundColor is None:
+            self.foregroundColor = self.defaultForeground
+        else:
+            basePalette.setColor(basePalette.Active, basePalette.Text, self.foregroundColor)
+            basePalette.setColor(basePalette.Inactive, basePalette.Text, self.foregroundColor)
+        if self.backgroundColor is None:
+            self.backgroundColor = self.defaultBackground
+        else:
+            basePalette.setColor(basePalette.Active, basePalette.Base, self.backgroundColor)
+            basePalette.setColor(basePalette.Inactive, basePalette.Base, self.backgroundColor)
+        self.foregroundEdit.setText(self.foregroundColor.name())
+        self.foregroundEdit.textChanged.connect(self.setForegroundColor)
+        self.foregroundEdit.editBtnClicked.connect(self.foregroundSelect)
+        self.foregroundEdit.setPalette(basePalette)
+        layout.addWidget(self.foregroundEdit, 0, 1)
+        autoBgBtn = QtGui.QPushButton('Autoset background')
+        layout.addWidget(autoBgBtn, 0, 2)
+        autoBgBtn.clicked.connect(lambda: self.setBackgroundColor(self.reverseColor(self.foregroundColor)))
+
+        layout.addWidget(QtGui.QLabel('Background:'))
+        self.backgroundEdit = ColorLineEdit()
+        self.backgroundEdit.setText(self.backgroundColor.name())
+        self.backgroundEdit.textChanged.connect(self.setBackgroundColor)
+        self.backgroundEdit.editBtnClicked.connect(self.backgroundSelect)
+        self.backgroundEdit.setPalette(basePalette)
+        layout.addWidget(self.backgroundEdit, 1, 1)
+        autoFgBtn = QtGui.QPushButton('Autoset text')
+        layout.addWidget(autoFgBtn, 1, 2)
+        autoFgBtn.clicked.connect(lambda: self.setForegroundColor(self.reverseColor(self.backgroundColor)))
+
+        self.buttonBox = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok|QtGui.QDialogButtonBox.Cancel|QtGui.QDialogButtonBox.RestoreDefaults)
+        layout.addWidget(self.buttonBox, layout.rowCount(), 0, 1, layout.columnCount())
+        self.okBtn = self.buttonBox.button(self.buttonBox.Ok)
+        self.okBtn.clicked.connect(self.accept)
+        self.buttonBox.button(self.buttonBox.Cancel).clicked.connect(self.reject)
+        self.restoreBtn = self.buttonBox.button(self.buttonBox.RestoreDefaults)
+        self.restoreBtn.setIcon(QtGui.QIcon.fromTheme('edit-undo'))
+        self.restoreBtn.clicked.connect(lambda: [self.setBackgroundColor(), self.setForegroundColor()])
+
+    def reverseColor(self, color):
+        r, g, b, a = color.getRgb()
+        return QtGui.QColor(r^255, g^255, b^255)
+
+    def foregroundSelect(self):
+        color = QtGui.QColorDialog.getColor(self.foregroundColor, self, 'Select text color')
+        if color.isValid():
+            self.foregroundEdit.setText(color.name())
+            self.setForegroundColor(color)
+
+    def setForegroundColor(self, color=None):
+        if not color:
+            color = self.defaultForeground
+        elif isinstance(color, str):
+            color = QtGui.QColor(color)
+        self.foregroundColor = color
+        palette = self.foregroundEdit.palette()
+        palette.setColor(palette.Active, palette.Text, self.foregroundColor)
+        palette.setColor(palette.Inactive, palette.Text, self.foregroundColor)
+        self.foregroundEdit.setPalette(palette)
+        self.backgroundEdit.setPalette(palette)
+
+    def backgroundSelect(self):
+        color = QtGui.QColorDialog.getColor(self.backgroundColor, self, 'Select background color')
+        if color.isValid():
+            self.backgroundEdit.setText(color.name())
+            self.setBackgroundColor(color)
+
+    def setBackgroundColor(self, color=None):
+        if not color:
+            color = self.defaultBackground
+        elif isinstance(color, str):
+            color = QtGui.QColor(color)
+        self.backgroundColor = color
+        palette = self.backgroundEdit.palette()
+        palette.setColor(palette.Active, palette.Base, self.backgroundColor)
+        palette.setColor(palette.Inactive, palette.Base, self.backgroundColor)
+        self.foregroundEdit.setPalette(palette)
+        self.backgroundEdit.setPalette(palette)
+
+    def exec_(self):
+        res = QtGui.QDialog.exec_(self)
+        if self.foregroundColor == self.defaultForeground and self.backgroundColor == self.defaultBackground:
+            self.foregroundColor = None
+            self.backgroundColor = None
+        return res
+
+
+class TagTreeDelegate(QtGui.QStyledItemDelegate):
+    tagColorsChanged = QtCore.pyqtSignal(object, object, object)
+    def editorEvent(self, event, model, _option, index):
+        if event.type() == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.RightButton:
+            if index != model.index(0, 0):
+                menu = QtGui.QMenu()
+                editColorAction = QtGui.QAction('Edit tag color...', menu)
+                menu.addAction(editColorAction)
+                res = menu.exec_(_option.widget.viewport().mapToGlobal(event.pos()))
+                if res == editColorAction:
+                    colorDialog = TagColorDialog(_option.widget.window(), index)
+                    if colorDialog.exec_():
+                        model.setData(index, colorDialog.foregroundColor, QtCore.Qt.ForegroundRole)
+                        model.setData(index, colorDialog.backgroundColor, QtCore.Qt.BackgroundRole)
+                        self.tagColorsChanged.emit(index, colorDialog.foregroundColor, colorDialog.backgroundColor)
+                return True
+            return True
+        return QtGui.QStyledItemDelegate.editorEvent(self, event, model, _option, index)
+
+
+class TagListDelegate(QtGui.QStyledItemDelegate):
+    tagSelected = QtCore.pyqtSignal(object)
+    def __init__(self, tagColorsDict, *args, **kwargs):
+        QtGui.QStyledItemDelegate.__init__(self, *args, **kwargs)
+        self.tagColorsDict = tagColorsDict
+
+    def sizeHint(self, option, index):
+        sizeHint = QtGui.QStyledItemDelegate.sizeHint(self, option, index)
+        tagList = index.data()
+        if tagList:
+            sizeHint.setWidth(sizeHint.width() + (len(tagList.split(',')) - 1) * 4)
+        return sizeHint
+
+    def editorEvent(self, event, model, _option, index):
+        if event.type() == QtCore.QEvent.MouseMove:
+            model.setData(index, event.pos(), HoverRole)
+#            _option.widget.dataChanged(index, index)
+            return True
+        return QtGui.QStyledItemDelegate.editorEvent(self, event, model, _option, index)
+
+    def paint(self, painter, _option, index):
+        if not index.isValid():
+            QtGui.QStyledItemDelegate.paint(self, painter, _option, index)
+            return
+        option = QtGui.QStyleOptionViewItemV4()
+        option.__init__(_option)
+        self.initStyleOption(option, QtCore.QModelIndex())
+        option.text = ''
+        QtGui.QApplication.style().drawControl(QtGui.QStyle.CE_ItemViewItem, option, painter)
+
+        tagList = index.data()
+        pos = index.data(HoverRole) if option.state & QtGui.QStyle.State_MouseOver else False
+        height = option.fontMetrics.height()
+        delta = 1
+        painter.setRenderHints(painter.Antialiasing)
+#        painter.setBrush(QtCore.Qt.lightGray)
+        left = option.rect.x() + .5
+        top = option.rect.y() + .5 + (option.rect.height() - height) / 2
+        for tag in tagList.split(','):
+            width = option.fontMetrics.width(tag) + 5
+            rect = QtCore.QRectF(left + delta + 1, top, width, height)
+            if tag in self.tagColorsDict:
+                foreground, background = self.tagColorsDict[tag]
+                border = foreground if pos and pos in rect else QtCore.Qt.NoPen
+            else:
+                if pos and pos in rect:
+                    border = foreground = QtCore.Qt.black
+                else:
+                    foreground = QtCore.Qt.darkGray
+                    border = QtCore.Qt.NoPen
+                background = QtCore.Qt.lightGray
+            painter.setPen(border)
+            painter.setBrush(background)
+            painter.drawRoundedRect(rect, 2, 2)
+            painter.setPen(foreground)
+            painter.drawText(rect, QtCore.Qt.AlignCenter, tag)
+            delta += width + 2
 
 
 class WaveScene(QtGui.QGraphicsScene):
@@ -638,6 +836,9 @@ class SampleBrowse(QtGui.QMainWindow):
         dbLayout = QtGui.QGridLayout()
         self.dbWidget.setLayout(dbLayout)
         self.dbTreeView = QtGui.QTreeView()
+        self.tagTreeDelegate = TagTreeDelegate()
+        self.tagTreeDelegate.tagColorsChanged.connect(self.saveTagColors)
+        self.dbTreeView.setItemDelegateForColumn(0, self.tagTreeDelegate)
         self.dbTreeView.setEditTriggers(self.dbTreeView.NoEditTriggers)
         self.dbTreeView.header().setStretchLastSection(False)
         self.dbTreeView.setHeaderHidden(True)
@@ -660,6 +861,9 @@ class SampleBrowse(QtGui.QMainWindow):
 #        self.sampleView.setItemDelegateForColumn(1, self.alignRightDelegate)
         for c in range(2, channelsColumn):
             self.sampleView.setItemDelegateForColumn(c, self.alignCenterDelegate)
+        self.tagListDelegate = TagListDelegate(self.tagColorsDict)
+        self.sampleView.setItemDelegateForColumn(tagsColumn, self.tagListDelegate)
+        self.sampleView.setMouseTracking(True)
         self.sampleControlDelegate = SampleControlDelegate()
         self.sampleControlDelegate.controlClicked.connect(self.playToggle)
         self.sampleControlDelegate.doubleClicked.connect(self.play)
@@ -724,12 +928,18 @@ class SampleBrowse(QtGui.QMainWindow):
         self.sampleDb = self.dbConn.cursor()
         try:
             self.sampleDb.execute('CREATE table samples(filePath varchar primary key, fileName varchar, length float, format varchar, sampleRate int, channels int, tags varchar, preview blob)')
-        except:
-            pass
-#        for x in range(8):
-#            self.sampleDb.execute('insert into samples values("asdf{}", 5232, "gnang gneoir")'.format(x))
-#        print([row for row in self.sampleDb.execute('SELECT * FROM samples')])
+        except Exception as e:
+            print(e)
+        try:
+            self.sampleDb.execute('CREATE table tagColors(tag varchar primary key, foreground varchar, background varchar)')
+        except Exception as e:
+            print(e)
         self.dbConn.commit()
+        self.tagColorsDict = {}
+        self.sampleDb.execute('SELECT tag,foreground,background FROM tagColors')
+        for res in self.sampleDb.fetchall():
+            tag, foreground, background = res
+            self.tagColorsDict[tag] = QtGui.QColor(foreground), QtGui.QColor(background)
 
     def showEvent(self, event):
         if not self.shown:
@@ -1070,7 +1280,7 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbProxyModel.setFilterRegExp(text)
 
     def editTags(self, index):
-        if self.sampleView.model() != self.dbProxyModel or index.column() != 5:
+        if self.sampleView.model() != self.dbProxyModel or index.column() != tagsColumn:
             return
         filePath = index.sibling(index.row(), 0).data(FilePathRole)
         self.sampleDb.execute('SELECT tags FROM samples WHERE filePath=?', (filePath, ))
@@ -1083,6 +1293,32 @@ class SampleBrowse(QtGui.QMainWindow):
         self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (res, filePath))
         self.dbConn.commit()
         self.reloadTags()
+        self.sampleView.resizeColumnToContents(tagsColumn)
+
+    def saveTagColors(self, index, foregroundColor, backgroundColor):
+        root = self.dbTreeProxyModel.index(0, 0)
+        tag = index.data()
+        parent = index.parent()
+        while parent != root:
+            tag = '{parent}/{current}'.format(parent=parent.data(), current=tag)
+            parent = parent.parent()
+        if not foregroundColor and not backgroundColor:
+            self.sampleDb.execute(
+                'DELETE FROM tagColors WHERE tag=?', 
+                (tag, )
+                )
+            try:
+                self.tagColorsDict.pop(tag)
+            except:
+                pass
+        else:
+            self.sampleDb.execute(
+                'INSERT OR REPLACE INTO tagColors(tag,foreground,background) VALUES (?,?,?)', 
+                (tag, foregroundColor.name(), backgroundColor.name())
+                )
+            self.tagColorsDict[tag] = foregroundColor, backgroundColor
+        self.dbConn.commit()
+        self.sampleView.viewport().update()
 
     def reloadTags(self):
         self.sampleDb.execute('SELECT tags FROM samples')
