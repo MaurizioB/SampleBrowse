@@ -1364,7 +1364,7 @@ class SampleBrowse(QtGui.QMainWindow):
             return
         #TODO this has to be implemented along with browseDb
         self.dbModel.clear()
-        self.dbModel.setHorizontalHeaderLabels(['Name', 'Length', 'Format', 'Rate', 'Ch.', 'Tags'])
+        self.dbModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Tags', 'Preview'])
         currentTag = index.data()
         current = index
         while True:
@@ -1466,8 +1466,10 @@ class SampleBrowse(QtGui.QMainWindow):
     def selectTagOnTree(self, tag):
         index = self.dbTreeModel.indexFromPath(tag)
         if index:
-            self.dbTreeView.setCurrentIndex(self.dbTreeProxyModel.mapFromSource(index))
+            mapIndex = self.dbTreeProxyModel.mapFromSource(index)
+            self.dbTreeView.setCurrentIndex(mapIndex)
             self.dbTreeView.scrollTo(index, self.dbTreeView.EnsureVisible)
+            self.dbTreeViewDoubleClicked(mapIndex)
 
     def tagsApplied(self, tagList):
         filePath = self.currentShownSampleIndex.data(FilePathRole)
