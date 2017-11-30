@@ -236,6 +236,18 @@ class TagsModel(QtGui.QStandardItemModel):
         self.appendRow([QtGui.QStandardItem('All samples'), self.totalCountItem])
         self.tags = set()
 
+    def indexFromPath(self, path):
+        tagTree = path.split('/')
+        depth = 0
+        current = self.index(0, 0)
+        while depth < len(tagTree):
+            childItemMatch = self.match(self.index(0, 0, current), QtCore.Qt.DisplayRole, tagTree[depth], flags=QtCore.Qt.MatchExactly)
+            if not childItemMatch:
+                return None
+            current = childItemMatch[0]
+            depth += 1
+        return current
+
     def setTags(self, tags):
         tags = set(tags)
         try:
@@ -503,7 +515,7 @@ class TagTreeDelegate(QtGui.QStyledItemDelegate):
 
 
 class TagListDelegate(QtGui.QStyledItemDelegate):
-    tagSelected = QtCore.pyqtSignal(object)
+    tagSelected = QtCore.pyqtSignal(str)
     def __init__(self, tagColorsDict, *args, **kwargs):
         QtGui.QStyledItemDelegate.__init__(self, *args, **kwargs)
         self.tagColorsDict = tagColorsDict
@@ -515,12 +527,25 @@ class TagListDelegate(QtGui.QStyledItemDelegate):
             sizeHint.setWidth(sizeHint.width() + (len(tagList.split(',')) - 1) * 4)
         return sizeHint
 
-    def editorEvent(self, event, model, _option, index):
+    def editorEvent(self, event, model, option, index):
         if event.type() == QtCore.QEvent.MouseMove:
             model.setData(index, event.pos(), HoverRole)
 #            _option.widget.dataChanged(index, index)
             return True
-        return QtGui.QStyledItemDelegate.editorEvent(self, event, model, _option, index)
+        elif event.type() == QtCore.QEvent.MouseButtonPress and index.data():
+            delta = 1
+            height = option.fontMetrics.height()
+            left = option.rect.x() + .5
+            top = option.rect.y() + .5 + (option.rect.height() - height) / 2
+            for tag in index.data().split(','):
+                width = option.fontMetrics.width(tag) + 5
+                rect = QtCore.QRectF(left + delta + 1, top, width, height)
+                if event.pos() in rect:
+                    self.tagSelected.emit(tag)
+                    break
+                delta += width + 2
+            return True
+        return QtGui.QStyledItemDelegate.editorEvent(self, event, model, option, index)
 
     def paint(self, painter, _option, index):
         if not index.isValid():
@@ -863,6 +888,7 @@ class SampleBrowse(QtGui.QMainWindow):
             self.sampleView.setItemDelegateForColumn(c, self.alignCenterDelegate)
         self.tagListDelegate = TagListDelegate(self.tagColorsDict)
         self.sampleView.setItemDelegateForColumn(tagsColumn, self.tagListDelegate)
+        self.tagListDelegate.tagSelected.connect(self.selectTagOnTree)
         self.sampleView.setMouseTracking(True)
         self.sampleControlDelegate = SampleControlDelegate()
         self.sampleControlDelegate.controlClicked.connect(self.playToggle)
@@ -1437,6 +1463,12 @@ class SampleBrowse(QtGui.QMainWindow):
             waveData = sf.read(always_2d=True, dtype=self.dtype)
         return waveData
 
+    def selectTagOnTree(self, tag):
+        index = self.dbTreeModel.indexFromPath(tag)
+        if index:
+            self.dbTreeView.setCurrentIndex(self.dbTreeProxyModel.mapFromSource(index))
+            self.dbTreeView.scrollTo(index, self.dbTreeView.EnsureVisible)
+
     def tagsApplied(self, tagList):
         filePath = self.currentShownSampleIndex.data(FilePathRole)
         self.sampleDb.execute('SELECT * FROM samples WHERE filePath=?', (filePath, ))
@@ -1471,9 +1503,10 @@ class SampleBrowse(QtGui.QMainWindow):
         self.infoSampleRateLbl.setText(str(info.samplerate))
         self.infoChannelsLbl.setText(str(info.channels))
 
-        tagsIndex = index.sibling(index.row(), tagsColumn)
-        if tagsIndex.isValid():
-            self.tagsEdit.setTags(tagsIndex.data())
+        if self.sampleView.model() == self.dbProxyModel:
+            tagsIndex = index.sibling(index.row(), tagsColumn)
+            if tagsIndex.isValid():
+                self.tagsEdit.setTags(tagsIndex.data())
 
         previewData = fileIndex.data(PreviewRole)
         if not previewData:
