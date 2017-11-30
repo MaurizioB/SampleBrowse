@@ -200,7 +200,7 @@
       <property name="currentIndex">
        <number>1</number>
       </property>
-      <widget class="QWidget" name="infoTab" native="true">
+      <widget class="QWidget" name="infoTab">
        <property name="enabled">
         <bool>false</bool>
        </property>
@@ -334,15 +334,12 @@
        </attribute>
        <layout class="QGridLayout" name="gridLayout_5">
         <item row="0" column="0">
-         <widget class="TagsEditorTextBrowser" name="tagsEdit">
+         <widget class="TagsEditorTextEdit" name="tagsEdit">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Ignored" vsizetype="Ignored">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
-          </property>
-          <property name="readOnly">
-           <bool>true</bool>
           </property>
          </widget>
         </item>
@@ -366,8 +363,8 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>TagsEditorTextBrowser</class>
-   <extends>QTextBrowser</extends>
+   <class>TagsEditorTextEdit</class>
+   <extends>QTextEdit</extends>
    <header>samplebrowse</header>
   </customwidget>
  </customwidgets>

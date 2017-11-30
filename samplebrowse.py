@@ -18,18 +18,95 @@ WaveRole = InfoRole + 1
 PreviewRole = WaveRole + 1
 
 
-class TagsEditorTextBrowser(QtGui.QTextBrowser):
-    def setText(self, text):
+class TagsEditorTextEdit(QtGui.QTextEdit):
+    tagsApplied = QtCore.pyqtSignal(object)
+    def __init__(self, *args, **kwargs):
+        QtGui.QTextEdit.__init__(self, *args, **kwargs)
+        self.document().setDefaultStyleSheet('''
+            span {
+                background-color: rgba(200,200,200,150);
+            }
+            span.sep {
+                color: transparent;
+                background-color: transparent;
+                }
+            ''')
+        self.textChanged.connect(self.checkText)
+        self.applyBtn = QtGui.QPushButton('Apply', self)
+        self.applyBtn.setMaximumSize(self.applyBtn.fontMetrics().width('Apply') + 4, self.applyBtn.fontMetrics().height() + 2)
+        self.applyBtn.setVisible(False)
+        self.applyBtn.clicked.connect(self.applyTags)
+        self.applyMode = False
+        self._tagList = ''
+        self.viewport().setCursor(QtCore.Qt.IBeamCursor)
+
+    def keyPressEvent(self, event):
+        if not self.applyMode:
+            return QtGui.QTextEdit.keyPressEvent(self, event)
+        else:
+            if event.key() == QtCore.Qt.Key_Escape:
+                self.textChanged.disconnect(self.checkText)
+                self._setTags(self._tagList)
+                cursor = self.textCursor()
+                cursor.movePosition(cursor.End)
+                self.setTextCursor(cursor)
+                self.textChanged.connect(self.checkText)
+            elif event.key() in (QtCore.Qt.Key_Enter, QtCore.Qt.Key_Return):
+                self.clearFocus()
+                self.applyTags()
+            else:
+                return QtGui.QTextEdit.keyPressEvent(self, event)
+
+    def applyTags(self):
+        self.checkText()
+        self._tagList = self.toPlainText()
+        self.tagsApplied.emit(self.tags())
+
+    def checkText(self):
+        pos = self.textCursor().position()
+        self.textChanged.disconnect(self.checkText)
+        self._setTags(re.sub(r'\n+', ',', self.toPlainText()))
+        self.textChanged.connect(self.checkText)
+        cursor = self.textCursor()
+        if len(self.toPlainText()) < pos:
+            pos = len(self.toPlainText())
+        cursor.setPosition(pos)
+        self.setTextCursor(cursor)
+
+    def _setTags(self, tagList):
+        tagList = re.sub(r'\,\,+', ',', tagList)
         tags = []
-        for tag in text.split(','):
+        for tag in tagList.split(','):
             tags.append(tag.strip().strip('\n'))
-        QtGui.QTextBrowser.setText(self, ','.join(tags))
-#        self.setReadOnly(False)
+        QtGui.QTextEdit.setHtml(self, '<span>{}</span>'.format('</span><span class="sep">,</span><span>'.join(tags)))
+
+    def setTags(self, tagList):
+        self._tagList = tagList
+        self._setTags(tagList)
+        cursor = self.textCursor()
+        cursor.movePosition(cursor.End)
+        self.setTextCursor(cursor)
 
     def tags(self):
         tags = re.sub(r'\,\,+', ',', self.toPlainText()).replace('\n', ',').strip(',')
         tagsSet = set(tags.split(','))
         return ','.join(sorted(tagsSet))
+
+    def enterEvent(self, event):
+        if not self.applyMode:
+            return
+        self.applyBtn.setVisible(True)
+        self.moveApplyBtn()
+
+    def moveApplyBtn(self):
+        self.applyBtn.move(self.width() - self.applyBtn.width() - 2, self.height() - self.applyBtn.height() - 2)
+
+    def leaveEvent(self, event):
+        self.applyBtn.setVisible(False)
+
+    def resizeEvent(self, event):
+        QtGui.QTextEdit.resizeEvent(self, event)
+        self.moveApplyBtn()
 
 
 class TagsEditorDialog(QtGui.QDialog):
@@ -39,9 +116,9 @@ class TagsEditorDialog(QtGui.QDialog):
         layout = QtGui.QGridLayout()
         self.setLayout(layout)
         layout.addWidget(QtGui.QLabel('Edit tags for sample "{}"\nTags are separated by commas.'.format(filePath)))
-        self.tagsEditor = TagsEditorTextBrowser()
-        self.tagsEditor.setText(tags)
-        self.tagsEditor.setReadOnly(False)
+        self.tagsEditor = TagsEditorTextEdit()
+        self.tagsEditor.setTags(tags)
+#        self.tagsEditor.setReadOnly(False)
         layout.addWidget(self.tagsEditor)
         self.buttonBox = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok|QtGui.QDialogButtonBox.Cancel)
         self.buttonBox.button(self.buttonBox.Ok).clicked.connect(self.accept)
@@ -87,9 +164,9 @@ class AddSamplesWithTagDialog(QtGui.QDialog):
         sampleView.resizeRowsToContents()
 #        sampleView.setStretchLastSection(True)
         layout.addWidget(QtGui.QLabel('Tags that will be applied to all of them:'))
-        self.tagsEditor = TagsEditorTextBrowser()
+        self.tagsEditor = TagsEditorTextEdit()
         self.tagsEditor.setMaximumHeight(100)
-        self.tagsEditor.setReadOnly(False)
+#        self.tagsEditor.setReadOnly(False)
         layout.addWidget(self.tagsEditor)
         self.buttonBox = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok|QtGui.QDialogButtonBox.Cancel)
         self.buttonBox.button(self.buttonBox.Ok).clicked.connect(self.accept)
@@ -164,8 +241,8 @@ class TagsModel(QtGui.QStandardItemModel):
     def clearTag(self, tagTree, depth, parentItem=None):
 #        return
         if parentItem is None:
-            parentItem = self
-            parentIndex = self.index(0, 0)
+            parentItem = self.item(0, 0)
+            parentIndex = self.index(0, 0, self.index(0, 0))
         else:
             parentIndex = self.index(0, 0, parentItem.index())
         childTag = tagTree[depth]
@@ -192,14 +269,26 @@ class TagsModel(QtGui.QStandardItemModel):
 
     def checkAndCreateTags(self, tagTree, depth, parentItem=None):
         if parentItem is None:
-            parentItem = self
-            parentIndex = self.index(0, 0, QtCore.QModelIndex())
+            parentItem = self.item(0, 0)
+            parentIndex = self.index(0, 0, self.index(0, 0))
         else:
             parentIndex = self.index(0, 0, parentItem.index())
         childTag = tagTree[depth]
         currentTree = '/'.join(tagTree[:depth+1])
+        hasChildren = True if len(tagTree) > depth + 1 else False
         self.db.execute('SELECT * FROM samples WHERE tags LIKE ?', ('%{}%'.format(currentTree), ))
-        count = str(len(self.db.fetchall()))
+        count = 0
+        for item in self.db.fetchall():
+            for tag in item[6].split(','):
+                if hasChildren:
+                    if tag.startswith(currentTree + '/'):
+                        count += 1
+                        break
+                else:
+                    if tag == currentTree:
+                        count += 1
+                        break
+        count = str(count)
         childItemMatch = self.match(parentIndex, QtCore.Qt.DisplayRole, childTag, flags=QtCore.Qt.MatchExactly)
         if childItemMatch:
             childIndex = childItemMatch[0]
@@ -209,7 +298,8 @@ class TagsModel(QtGui.QStandardItemModel):
             childItem = QtGui.QStandardItem(childTag)
             countItem = QtGui.QStandardItem(count)
             parentItem.appendRow([childItem, countItem])
-        if len(tagTree[depth:]) > 1:
+#        if len(tagTree[depth:]) > 1:
+        if hasChildren:
             self.checkAndCreateTags(tagTree, depth + 1, childItem)
 
 
@@ -587,6 +677,9 @@ class SampleBrowse(QtGui.QMainWindow):
         self.searchEdit.textChanged.connect(self.searchDb)
         filterLayout.addWidget(self.searchEdit)
 
+        self.tagsEdit.applyMode = True
+        self.tagsEdit.tagsApplied.connect(self.tagsApplied)
+
         self.currentSampleIndex = None
         self.currentShownSampleIndex = None
         self.currentBrowseDir = None
@@ -602,7 +695,9 @@ class SampleBrowse(QtGui.QMainWindow):
         self.infoTabWidget.setTabEnabled(1, False)
         self.shown = False
         self.playerThread.start()
+
         self.reloadTags()
+        self.dbTreeView.expandToDepth(0)
 
     def loadDb(self):
         dataDir = QtCore.QDir(QtGui.QDesktopServices.storageLocation(QtGui.QDesktopServices.DataLocation))
@@ -974,9 +1069,9 @@ class SampleBrowse(QtGui.QMainWindow):
     def reloadTags(self):
         self.sampleDb.execute('SELECT tags FROM samples')
         tags = set()
-        for taglist in self.sampleDb.fetchall():
-            taglist = taglist[0].strip(',').split(',')
-            [tags.add(tag.strip().strip('\n')) for tag in taglist]
+        for tagList in self.sampleDb.fetchall():
+            tagList = tagList[0].strip(',').split(',')
+            [tags.add(tag.strip().strip('\n')) for tag in tagList]
         self.dbTreeModel.setTags(tags)
         self.dbTreeView.sortByColumn(0, QtCore.Qt.AscendingOrder)
         self.dbTreeView.resizeColumnToContents(1)
@@ -994,7 +1089,7 @@ class SampleBrowse(QtGui.QMainWindow):
         current = index
         while True:
             parent = current.parent()
-            if not parent.isValid():
+            if not parent.isValid() or parent == self.dbTreeProxyModel.index(0, 0):
                 break
             currentTag = '{parent}/{current}'.format(parent=parent.data(), current=currentTag)
             current = parent
@@ -1084,6 +1179,19 @@ class SampleBrowse(QtGui.QMainWindow):
             waveData = sf.read(always_2d=True, dtype=self.dtype)
         return waveData
 
+    def tagsApplied(self, tagList):
+        filePath = self.currentShownSampleIndex.data(FilePathRole)
+        self.sampleDb.execute('SELECT * FROM samples WHERE filePath=?', (filePath, ))
+        if not self.sampleDb.fetchone():
+            return
+        self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (tagList, filePath))
+        self.reloadTags()
+        sampleMatch = self.dbModel.match(self.dbModel.index(0, 0), FilePathRole, filePath, flags=QtCore.Qt.MatchExactly)
+        if sampleMatch:
+            fileIndex = sampleMatch[0]
+            tagsIndex = fileIndex.sibling(fileIndex.row(), 5)
+            self.dbModel.itemFromIndex(tagsIndex).setText(tagList)
+
     def setCurrentWave(self, index=None):
         self.infoTab.setEnabled(True)
         self.infoTabWidget.setTabEnabled(1, True if self.sampleView.model() == self.dbProxyModel else False)
@@ -1107,7 +1215,7 @@ class SampleBrowse(QtGui.QMainWindow):
 
         tagsIndex = index.sibling(index.row(), 5)
         if tagsIndex.isValid():
-            self.tagsEdit.setText(tagsIndex.data())
+            self.tagsEdit.setTags(tagsIndex.data())
 
         previewData = fileIndex.data(PreviewRole)
         if not previewData:
