@@ -56,6 +56,9 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
 
     def keyPressEvent(self, event):
         if not self.applyMode:
+            if event.key() == QtCore.Qt.Key_Tab:
+                event.ignore()
+                return
             return QtGui.QTextEdit.keyPressEvent(self, event)
         else:
             if event.key() == QtCore.Qt.Key_Escape:
@@ -79,7 +82,9 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
     def checkText(self):
         pos = self.textCursor().position()
         self.textChanged.disconnect(self.checkText)
-        self._setTags(re.sub(r'\n+', ',', self.toPlainText()))
+        if pos == 1 and self.toPlainText().startswith(','):
+            pos = 0
+        self._setTags(re.sub(r'[\n\t]+', ',', self.toPlainText()))
         self.textChanged.connect(self.checkText)
         cursor = self.textCursor()
         if len(self.toPlainText()) < pos:
@@ -88,7 +93,7 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
         self.setTextCursor(cursor)
 
     def _setTags(self, tagList):
-        tagList = re.sub(r'\,\,+', ',', tagList)
+        tagList = re.sub(r'\,\,+', ',', tagList.lstrip(','))
         tags = []
         for tag in tagList.split(','):
             tags.append(tag.strip().strip('\n'))
@@ -558,6 +563,8 @@ class TagListDelegate(QtGui.QStyledItemDelegate):
         QtGui.QApplication.style().drawControl(QtGui.QStyle.CE_ItemViewItem, option, painter)
 
         tagList = index.data()
+        if not tagList:
+            return
         pos = index.data(HoverRole) if option.state & QtGui.QStyle.State_MouseOver else False
         height = option.fontMetrics.height()
         delta = 1
@@ -1365,6 +1372,9 @@ class SampleBrowse(QtGui.QMainWindow):
         #TODO this has to be implemented along with browseDb
         self.dbModel.clear()
         self.dbModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Tags', 'Preview'])
+        for column, visible in dbColumns.items():
+            self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
+
         currentTag = index.data()
         current = index
         while True:
