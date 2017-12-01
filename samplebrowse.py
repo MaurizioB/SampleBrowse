@@ -96,7 +96,7 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
         tagList = re.sub(r'\,\,+', ',', tagList.lstrip(','))
         tags = []
         for tag in tagList.split(','):
-            tags.append(tag.strip().strip('\n'))
+            tags.append(tag.lstrip().lstrip('/').strip('\n'))
         QtGui.QTextEdit.setHtml(self, '<span>{}</span>'.format('</span><span class="sep">,</span><span>'.join(tags)))
 
     def setTags(self, tagList):
@@ -129,12 +129,12 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
 
 
 class TagsEditorDialog(QtGui.QDialog):
-    def __init__(self, parent, filePath, tags):
+    def __init__(self, parent, fileName, tags):
         QtGui.QDialog.__init__(self, parent)
         self.setWindowTitle('Edit tags')
         layout = QtGui.QGridLayout()
         self.setLayout(layout)
-        layout.addWidget(QtGui.QLabel('Edit tags for sample "{}"\nTags are separated by commas.'.format(filePath)))
+        layout.addWidget(QtGui.QLabel('Edit tags for sample "{}"\nSeparate tags with commas.'.format(fileName)))
         self.tagsEditor = TagsEditorTextEdit()
         self.tagsEditor.setTags(tags)
 #        self.tagsEditor.setReadOnly(False)
@@ -182,7 +182,7 @@ class AddSamplesWithTagDialog(QtGui.QDialog):
         sampleView.resizeColumnsToContents()
         sampleView.resizeRowsToContents()
 #        sampleView.setStretchLastSection(True)
-        layout.addWidget(QtGui.QLabel('Tags that will be applied to all of them:'))
+        layout.addWidget(QtGui.QLabel('Tags that will be applied to all of them (separate tags with commas):'))
         self.tagsEditor = TagsEditorTextEdit()
         self.tagsEditor.setMaximumHeight(100)
 #        self.tagsEditor.setReadOnly(False)
@@ -357,12 +357,16 @@ class EllipsisLabel(QtGui.QLabel):
 
 
 class AlignItemDelegate(QtGui.QStyledItemDelegate):
-    def __init__(self, alignment):
+    def __init__(self, alignment, elideMode=QtCore.Qt.ElideRight):
         QtGui.QStyledItemDelegate.__init__(self)
         self.alignment = alignment
+        if not alignment & (QtCore.Qt.AlignTop|QtCore.Qt.AlignVCenter|QtCore.Qt.AlignBottom):
+            self.alignment |= QtCore.Qt.AlignVCenter
+        self.elideMode = elideMode
 
     def paint(self, painter, option, index):
         option.displayAlignment = self.alignment
+        option.textElideMode = self.elideMode
         return QtGui.QStyledItemDelegate.paint(self, painter, option, index)
 
 
@@ -537,7 +541,7 @@ class TagListDelegate(QtGui.QStyledItemDelegate):
             model.setData(index, event.pos(), HoverRole)
 #            _option.widget.dataChanged(index, index)
             return True
-        elif event.type() == QtCore.QEvent.MouseButtonPress and index.data():
+        elif event.type() == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.LeftButton and index.data():
             delta = 1
             height = option.fontMetrics.height()
             left = option.rect.x() + .5
@@ -888,9 +892,10 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbProxyModel = SampleSortFilterProxyModel()
         self.dbProxyModel.setSourceModel(self.dbModel)
         self.sampleView.setModel(self.browseModel)
-        self.alignRightDelegate = AlignItemDelegate(QtCore.Qt.AlignVCenter|QtCore.Qt.AlignRight)
+        self.alignRightDelegate = AlignItemDelegate(QtCore.Qt.AlignRight)
         self.alignCenterDelegate = AlignItemDelegate(QtCore.Qt.AlignCenter)
-#        self.sampleView.setItemDelegateForColumn(1, self.alignRightDelegate)
+        self.alignLeftElideMidDelegate = AlignItemDelegate(QtCore.Qt.AlignLeft, QtCore.Qt.ElideMiddle)
+        self.sampleView.setItemDelegateForColumn(1, self.alignLeftElideMidDelegate)
         for c in range(2, channelsColumn):
             self.sampleView.setItemDelegateForColumn(c, self.alignCenterDelegate)
         self.tagListDelegate = TagListDelegate(self.tagColorsDict)
@@ -1122,6 +1127,8 @@ class SampleBrowse(QtGui.QMainWindow):
         self.currentBrowseDir = path
         self.browseModel.clear()
         self.browseModel.setHorizontalHeaderLabels(['Name', None, 'Length', 'Format', 'Rate', 'Ch.', None, None])
+        for column, visible in browseColumns.items():
+            self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
         for fileInfo in path.entryInfoList(availableExtensions, QtCore.QDir.Files):
             filePath = fileInfo.absoluteFilePath()
             fileName = fileInfo.fileName()
@@ -1175,11 +1182,14 @@ class SampleBrowse(QtGui.QMainWindow):
         filePath = fileIndex.data(FilePathRole)
         menu = QtGui.QMenu()
         addToDatabaseAction = QtGui.QAction('Add "{}" to database'.format(fileName), menu)
+        editTagsAction = QtGui.QAction('Edit "{}" tags...'.format(fileName), menu)
         delFromDatabaseAction = QtGui.QAction('Remove "{}" from database'.format(fileName), menu)
         self.sampleDb.execute('SELECT * FROM samples WHERE filePath=?', (filePath, ))
         if self.sampleView.model() == self.browseModel and not self.sampleDb.fetchone():
             menu.addAction(addToDatabaseAction)
         else:
+            if self.sampleView.model() == self.dbProxyModel:
+                menu.addAction(editTagsAction)
             menu.addAction(delFromDatabaseAction)
         res = menu.exec_(self.sampleView.viewport().mapToGlobal(pos))
         if res == addToDatabaseAction:
@@ -1197,6 +1207,8 @@ class SampleBrowse(QtGui.QMainWindow):
                 self.dbModel.takeRow(fileIndex.row())
             else:
                 self.sampleDbUpdated = True
+        elif res == editTagsAction:
+            self.editTags(fileIndex.sibling(fileIndex.row(), tagsColumn))
 
     def multiSampleContextMenu(self, pos):
         new = []
@@ -1289,6 +1301,8 @@ class SampleBrowse(QtGui.QMainWindow):
         self.sampleDbUpdated = False
         self.dbModel.clear()
         self.dbModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Tags', 'Preview'])
+        for column, visible in dbColumns.items():
+            self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
         for row in self.sampleDb.execute(query):
             filePath, fileName, length, format, sampleRate, channels, tags, data = row
             fileItem = QtGui.QStandardItem(fileName)
@@ -1305,7 +1319,7 @@ class SampleBrowse(QtGui.QMainWindow):
         self.sampleView.resizeColumnsToContents()
         self.sampleView.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
         self.sampleView.horizontalHeader().setResizeMode(1, QtGui.QHeaderView.Stretch)
-        for c in range(1, channelsColumn):
+        for c in range(2, channelsColumn):
             self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
 
@@ -1315,10 +1329,11 @@ class SampleBrowse(QtGui.QMainWindow):
     def editTags(self, index):
         if self.sampleView.model() != self.dbProxyModel or index.column() != tagsColumn:
             return
-        filePath = index.sibling(index.row(), 0).data(FilePathRole)
+        fileIndex = index.sibling(index.row(), 0)
+        filePath = fileIndex.data(FilePathRole)
         self.sampleDb.execute('SELECT tags FROM samples WHERE filePath=?', (filePath, ))
         tags = self.sampleDb.fetchone()[0]
-        res = TagsEditorDialog(self, filePath, tags).exec_()
+        res = TagsEditorDialog(self, fileIndex.data(), tags).exec_()
         if not isinstance(res, str):
             return
         tagsItem = self.sampleView.model().itemFromIndex(index)
