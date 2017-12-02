@@ -1174,6 +1174,7 @@ class Player(QtCore.QObject):
         self.audioQueue.put(array)
 
 
+
 class SampleBrowse(QtGui.QMainWindow):
     def __init__(self):
         QtGui.QMainWindow.__init__(self)
@@ -1719,7 +1720,7 @@ class SampleBrowse(QtGui.QMainWindow):
             rateItem = QtGui.QStandardItem(str(sampleRate))
             channelsItem = QtGui.QStandardItem(str(channels))
             tagsItem = QtGui.QStandardItem()
-            tagsItem.setData(list(filter(lambda x: x, tags.split(','))), TagsRole)
+            tagsItem.setData(list(filter(None, tags.split(','))), TagsRole)
 #            self.dbModel.appendRow([fileItem, lengthItem, formatItem, rateItem, channelsItem, tagsItem])
             self.dbModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, tagsItem])
         self.sampleView.resizeColumnsToContents()
@@ -1738,7 +1739,7 @@ class SampleBrowse(QtGui.QMainWindow):
         fileIndex = index.sibling(index.row(), 0)
         filePath = fileIndex.data(FilePathRole)
         self.sampleDb.execute('SELECT tags FROM samples WHERE filePath=?', (filePath, ))
-        tags = list(filter(lambda x: x, self.sampleDb.fetchone()[0].split(',')))
+        tags = list(filter(None, self.sampleDb.fetchone()[0].split(',')))
         res = TagsEditorDialog(self, tags, fileIndex.data()).exec_()
         if not isinstance(res, list):
             return
@@ -1808,7 +1809,7 @@ class SampleBrowse(QtGui.QMainWindow):
         for row in self.sampleDb.fetchall():
             filePath, fileName, length, format, sampleRate, channels, tags, data = row
             if hasChildren:
-                for tag in tags:
+                for tag in tags.split(','):
                     if tag.startswith(currentTag):
                         break
                 else:
@@ -1824,7 +1825,7 @@ class SampleBrowse(QtGui.QMainWindow):
             rateItem = QtGui.QStandardItem(str(sampleRate))
             channelsItem = QtGui.QStandardItem(str(channels))
             tagsItem = QtGui.QStandardItem()
-            tagsItem.setData(list(filter(lambda x: x, tags.split(','))), TagsRole)
+            tagsItem.setData(list(filter(None, tags.split(','))), TagsRole)
             self.dbModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, tagsItem])
         self.sampleView.resizeColumnsToContents()
         self.sampleView.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
@@ -1870,6 +1871,27 @@ class SampleBrowse(QtGui.QMainWindow):
         waveData = fileItem.data(WaveRole)
         if info.channels == 1:
             waveData = waveData.repeat(2, axis=1)/2
+        elif info.channels == 2:
+            pass
+        elif info.channels == 3:
+            front = waveData[:, [0, 1]]/1.5
+            center = waveData[:, [2]].repeat(2, axis=1)/2
+            waveData = front + center
+        elif info.channels == 4:
+            front = waveData[:, [0, 1]]/2
+            rear = waveData[:, [2, 3]]/2
+            waveData = front + rear
+        elif info.channels == 5:
+            front = waveData[:, [0, 1]]/2.5
+            rear = waveData[:, [2, 3]]/2.5
+            center = waveData[:, [4]].repeat(2, axis=1)/2
+            waveData = front + rear + center
+        elif info.channels == 6:
+            front = waveData[:, [0, 1]]/3
+            rear = waveData[:, [2, 3]]/3
+            center = waveData[:, [4]].repeat(2, axis=1)/2
+            sub = waveData[:, [5]].repeate(2, axis=1)/2
+            waveData = front + rear + center + sub
         waveData = waveData * self.volumeSpin.value()/100.
         self.waveScene.movePlayhead(0)
         self.player.play(waveData.tostring())
