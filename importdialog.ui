@@ -71,7 +71,7 @@
      <item>
       <widget class="QLabel" name="label_4">
        <property name="text">
-        <string>Selected:</string>
+        <string>Selected for import:</string>
        </property>
       </widget>
      </item>
@@ -105,6 +105,9 @@
    </item>
    <item row="1" column="0">
     <widget class="QTableView" name="sampleView">
+     <property name="contextMenuPolicy">
+      <enum>Qt::CustomContextMenu</enum>
+     </property>
      <property name="editTriggers">
       <set>QAbstractItemView::NoEditTriggers</set>
      </property>
@@ -131,13 +134,6 @@
       <widget class="QPushButton" name="selectAllBtn">
        <property name="text">
         <string>Select all</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="selectNoneBtn">
-       <property name="text">
-        <string>Select none</string>
        </property>
       </widget>
      </item>

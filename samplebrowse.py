@@ -31,7 +31,8 @@ HoverRole = QtCore.Qt.UserRole + 1
 FilePathRole = QtCore.Qt.UserRole + 1
 InfoRole = FilePathRole + 1
 WaveRole = InfoRole + 1
-PreviewRole = WaveRole + 1
+TagsRole = WaveRole + 1
+PreviewRole = TagsRole + 1
 
 
 class TagsEditorTextEdit(QtGui.QTextEdit):
@@ -86,7 +87,7 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
         self.textChanged.disconnect(self.checkText)
         if pos == 1 and self.toPlainText().startswith(','):
             pos = 0
-        self._setTags(re.sub(r'[\n\t]+', ',', self.toPlainText()))
+        self._setTags(re.sub(r'\/,', ',', re.sub(r'[\n\t]+', ',', self.toPlainText())))
         self.textChanged.connect(self.checkText)
         cursor = self.textCursor()
         if len(self.toPlainText()) < pos:
@@ -102,16 +103,16 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
         QtGui.QTextEdit.setHtml(self, '<span>{}</span>'.format('</span><span class="sep">,</span><span>'.join(tags)))
 
     def setTags(self, tagList):
-        self._tagList = tagList
-        self._setTags(tagList)
+        self._tagList = [tag for tag in tagList if tag is not None]
+        self._setTags(','.join(self._tagList))
         cursor = self.textCursor()
         cursor.movePosition(cursor.End)
         self.setTextCursor(cursor)
 
     def tags(self):
-        tags = re.sub(r'\,\,+', ',', self.toPlainText()).replace('\n', ',').strip(',')
-        tagsSet = set(tags.split(','))
-        return ','.join(sorted(tagsSet))
+        tags = re.sub(r'\,\,+', ',', self.toPlainText()).replace('\n', ',').strip(',').split(',')
+        tags = set(tag.strip('/') for tag in tags)
+        return sorted(tags) if tags else []
 
     def enterEvent(self, event):
         if not self.applyMode:
@@ -212,6 +213,9 @@ class ImportDialogScan(ImportDialog):
         self.alignCenterDelegate = AlignItemDelegate(QtCore.Qt.AlignCenter)
         for c in range(2, channelsColumn + 1):
             self.sampleView.setItemDelegateForColumn(c, self.alignCenterDelegate)
+        self.tagListDelegate = TagListDelegate(self.parent().tagColorsDict)
+        self.sampleView.setItemDelegateForColumn(tagsColumn, self.tagListDelegate)
+        self.sampleView.setMouseTracking(True)
 
         fontMetrics = QtGui.QFontMetrics(self.font())
 
@@ -238,22 +242,78 @@ class ImportDialogScan(ImportDialog):
         self.crawler.done.connect(self.scanDone)
 
         self.selectAllBtn.clicked.connect(self.sampleView.selectAll)
-        self.selectNoneBtn.clicked.connect(self.sampleView.clearSelection)
         self.checkSelectedBtn.clicked.connect(lambda: self.setSelectedCheckState(QtCore.Qt.Checked))
         self.uncheckSelectedBtn.clicked.connect(lambda: self.setSelectedCheckState(QtCore.Qt.Unchecked))
         self.sampleProxyModel.dataChanged.connect(self.checkChecked)
         self.sampleView.selectionModel().selectionChanged.connect(
             lambda *args: self.editTagsBtn.setEnabled(len(self.sampleView.selectionModel().selection().indexes())))
+        self.editTagsBtn.clicked.connect(self.editTags)
+        self.sampleView.customContextMenuRequested.connect(self.sampleContextMenu)
 
-    def setEditTagsBtn(self, *args):
-        print(self.sampleView.selectionModel().selection().indexes())
+    def editTags(self):
+        indexes = []
+        tags = set()
+        for index in self.sampleView.selectedIndexes():
+            if index.column() == tagsColumn:
+                indexes.append(index)
+                tagList = index.data(TagsRole)
+                if tagList:
+                    tags.add(tuple(tagList))
+        if not indexes:
+            return
+        uncommon = False
+        if not tags:
+            tags = []
+        elif len(tags) == 1:
+            tags = list(tags)[0]
+        else:
+            tags = sorted(set(tag for tagList in tags for tag in tagList))
+            uncommon = True
+        res = TagsEditorDialog(self, tags, uncommon=uncommon).exec_()
+        if not isinstance(res, list):
+            return
+        for index in indexes:
+            self.sampleProxyModel.setData(index, res, TagsRole)
+        
+
+    def sampleContextMenu(self, pos):
+        menu = QtGui.QMenu()
+        setCheckedAction = QtGui.QAction('Set for import', menu)
+        unsetCheckedAction = QtGui.QAction('Unset for import', menu)
+        editTagsAction = QtGui.QAction('Edit tags...', menu)
+
+        selIndexes = self.sampleView.selectionModel().selection().indexes()
+        if selIndexes:
+            checked = 0
+            for index in selIndexes:
+                if index.column() == 0 and index.data(QtCore.Qt.CheckStateRole):
+                    checked += 1
+            setCheckedAction.setEnabled(checked != len(selIndexes) / self.sampleModel.columnCount())
+            unsetCheckedAction.setEnabled(checked != 0)
+        else:
+            setCheckedAction.setEnabled(False)
+            unsetCheckedAction.setEnabled(False)
+            editTagsAction.setEnabled(False)
+        sep = QtGui.QAction(menu)
+        sep.setSeparator(True)
+        selectAllAction = QtGui.QAction('Select all', menu)
+
+        menu.addActions([setCheckedAction, unsetCheckedAction, editTagsAction, sep, selectAllAction])
+        res = menu.exec_(self.sampleView.viewport().mapToGlobal(pos))
+        if res == selectAllAction:
+            self.sampleView.selectAll()
+        elif res == setCheckedAction:
+            self.setSelectedCheckState(QtCore.Qt.Checked)
+        elif res == unsetCheckedAction:
+            self.setSelectedCheckState(QtCore.Qt.Unchecked)
+        elif res == editTagsAction:
+            self.editTags()
 
     def setSelectedCheckState(self, state):
         self.sampleProxyModel.dataChanged.disconnect(self.checkChecked)
         for index in self.sampleView.selectedIndexes():
-            if index.column() != 0:
-                continue
-            self.sampleProxyModel.setData(index, state, QtCore.Qt.CheckStateRole)
+            if index.column() == 0:
+                self.sampleProxyModel.setData(index, state, QtCore.Qt.CheckStateRole)
         self.sampleProxyModel.dataChanged.connect(self.checkChecked)
         self.checkChecked()
 
@@ -269,6 +329,8 @@ class ImportDialogScan(ImportDialog):
 
     def found(self, fileInfo, info):
         fileItem = QtGui.QStandardItem(fileInfo.fileName())
+        fileItem.setData(fileInfo.absoluteFilePath(), FilePathRole)
+        fileItem.setData(info, InfoRole)
         fileItem.setCheckable(True)
         fileItem.setCheckState(QtCore.Qt.Checked)
         dirItem = QtGui.QStandardItem(fileInfo.absolutePath())
@@ -303,6 +365,21 @@ class ImportDialogScan(ImportDialog):
         self.show()
         self.popup.show()
         self.crawlerThread.start()
+        res = QtGui.QDialog.exec_(self)
+        if res:
+            sampleList = []
+            for row in range(self.sampleModel.rowCount()):
+                fileItem = self.sampleModel.item(row, 0)
+                if not fileItem.checkState():
+                    continue
+                fileName = fileItem.text()
+                filePath = fileItem.data(FilePathRole)
+                info = fileItem.data(InfoRole)
+                tags = self.sampleModel.item(row, tagsColumn).data(TagsRole)
+                sampleList.append((filePath, fileName, info, tags))
+            return sampleList
+        else:
+            return res
 
 
 class SampleScanDialog(QtGui.QDialog):
@@ -424,12 +501,20 @@ class SampleScanDialog(QtGui.QDialog):
 
 
 class TagsEditorDialog(QtGui.QDialog):
-    def __init__(self, parent, fileName, tags):
+    def __init__(self, parent, tags, fileName=None, uncommon=False):
         QtGui.QDialog.__init__(self, parent)
         self.setWindowTitle('Edit tags')
         layout = QtGui.QGridLayout()
         self.setLayout(layout)
-        layout.addWidget(QtGui.QLabel('Edit tags for sample "{}"\nSeparate tags with commas.'.format(fileName)))
+        if fileName:
+            headerLbl = QtGui.QLabel('Edit tags for sample "{}".\nSeparate tags with commas.'.format(fileName))
+        else:
+            text = 'Edit tags for selected samples.'
+            if uncommon:
+                text += '\nTags for selected samples do not match, be careful!'
+            text += '\nSeparate tags with commas.'
+            headerLbl = QtGui.QLabel(text)
+        layout.addWidget(headerLbl)
         self.tagsEditor = TagsEditorTextEdit()
         self.tagsEditor.setTags(tags)
 #        self.tagsEditor.setReadOnly(False)
@@ -818,6 +903,8 @@ class TagTreeDelegate(QtGui.QStyledItemDelegate):
         return QtGui.QStyledItemDelegate.editorEvent(self, event, model, _option, index)
 
 
+
+
 class TagListDelegate(QtGui.QStyledItemDelegate):
     tagSelected = QtCore.pyqtSignal(str)
     def __init__(self, tagColorsDict, *args, **kwargs):
@@ -826,9 +913,9 @@ class TagListDelegate(QtGui.QStyledItemDelegate):
 
     def sizeHint(self, option, index):
         sizeHint = QtGui.QStyledItemDelegate.sizeHint(self, option, index)
-        tagList = index.data()
+        tagList = index.data(TagsRole)
         if tagList:
-            sizeHint.setWidth(sizeHint.width() + (len(tagList.split(',')) - 1) * 4)
+            sizeHint.setWidth(sum(option.fontMetrics.width(tag) + 5 for tag in tagList) + 10)
         return sizeHint
 
     def editorEvent(self, event, model, option, index):
@@ -836,12 +923,12 @@ class TagListDelegate(QtGui.QStyledItemDelegate):
             model.setData(index, event.pos(), HoverRole)
 #            _option.widget.dataChanged(index, index)
             return True
-        elif event.type() == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.LeftButton and index.data():
+        elif event.type() == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.LeftButton and index.data(TagsRole):
             delta = 1
             height = option.fontMetrics.height()
             left = option.rect.x() + .5
             top = option.rect.y() + .5 + (option.rect.height() - height) / 2
-            for tag in index.data().split(','):
+            for tag in index.data(TagsRole):
                 width = option.fontMetrics.width(tag) + 5
                 rect = QtCore.QRectF(left + delta + 1, top, width, height)
                 if event.pos() in rect:
@@ -861,7 +948,7 @@ class TagListDelegate(QtGui.QStyledItemDelegate):
         option.text = ''
         QtGui.QApplication.style().drawControl(QtGui.QStyle.CE_ItemViewItem, option, painter)
 
-        tagList = index.data()
+        tagList = index.data(TagsRole)
         if not tagList:
             return
         pos = index.data(HoverRole) if option.state & QtGui.QStyle.State_MouseOver else False
@@ -871,7 +958,7 @@ class TagListDelegate(QtGui.QStyledItemDelegate):
 #        painter.setBrush(QtCore.Qt.lightGray)
         left = option.rect.x() + .5
         top = option.rect.y() + .5 + (option.rect.height() - height) / 2
-        for tag in tagList.split(','):
+        for tag in tagList:
             width = option.fontMetrics.width(tag) + 5
             rect = QtCore.QRectF(left + delta + 1, top, width, height)
             if tag in self.tagColorsDict:
@@ -1358,6 +1445,13 @@ class SampleBrowse(QtGui.QMainWindow):
         sampleRates = scanDialog.getSampleRates()
         channels = scanDialog.channelsCombo.currentIndex()
         res = ImportDialogScan(self, dirPath, scanMode, formats, sampleRates, channels).exec_()
+        if not res:
+            return
+        for filePath, fileName, info, tags in res:
+            self._addSampleToDb(filePath, fileName, info, ','.join(tags))
+        self.dbConn.commit()
+        self.reloadTags()
+        #TODO reload database table?
 
     def favouritesDataChanged(self, index, _):
         dirPathIndex = index.sibling(index.row(), 1)
@@ -1576,8 +1670,8 @@ class SampleBrowse(QtGui.QMainWindow):
             self._addSampleToDb(filePath, fileName, info, tags)
         self.dbConn.commit()
         self.reloadTags()
-        if self.sampleView.model() == self.browseModel:
-            self.sampleDbUpdated = True
+#        if self.sampleView.model() == self.browseModel:
+#            self.sampleDbUpdated = True
 #        else:
 #            reload query
 
@@ -1624,7 +1718,8 @@ class SampleBrowse(QtGui.QMainWindow):
             formatItem = QtGui.QStandardItem(format)
             rateItem = QtGui.QStandardItem(str(sampleRate))
             channelsItem = QtGui.QStandardItem(str(channels))
-            tagsItem = QtGui.QStandardItem(tags)
+            tagsItem = QtGui.QStandardItem()
+            tagsItem.setData(list(filter(lambda x: x, tags.split(','))), TagsRole)
 #            self.dbModel.appendRow([fileItem, lengthItem, formatItem, rateItem, channelsItem, tagsItem])
             self.dbModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, tagsItem])
         self.sampleView.resizeColumnsToContents()
@@ -1643,13 +1738,12 @@ class SampleBrowse(QtGui.QMainWindow):
         fileIndex = index.sibling(index.row(), 0)
         filePath = fileIndex.data(FilePathRole)
         self.sampleDb.execute('SELECT tags FROM samples WHERE filePath=?', (filePath, ))
-        tags = self.sampleDb.fetchone()[0]
-        res = TagsEditorDialog(self, fileIndex.data(), tags).exec_()
-        if not isinstance(res, str):
+        tags = list(filter(lambda x: x, self.sampleDb.fetchone()[0].split(',')))
+        res = TagsEditorDialog(self, tags, fileIndex.data()).exec_()
+        if not isinstance(res, list):
             return
-        tagsItem = self.sampleView.model().itemFromIndex(index)
-        tagsItem.setText(res)
-        self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (res, filePath))
+        self.sampleView.model().setData(index, res, TagsRole)
+        self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (','.join(res), filePath))
         self.dbConn.commit()
         self.reloadTags()
         self.sampleView.resizeColumnToContents(tagsColumn)
@@ -1713,14 +1807,13 @@ class SampleBrowse(QtGui.QMainWindow):
         self.sampleDb.execute('SELECT * FROM samples WHERE tags LIKE ?', ('%{}%'.format(currentTag), ))
         for row in self.sampleDb.fetchall():
             filePath, fileName, length, format, sampleRate, channels, tags, data = row
-            tagList = tags.split(',')
             if hasChildren:
-                for tag in tagList:
+                for tag in tags:
                     if tag.startswith(currentTag):
                         break
                 else:
                     continue
-            elif not currentTag in tagList:
+            elif not currentTag in tags:
                 continue
             fileItem = QtGui.QStandardItem(fileName)
             fileItem.setData(filePath, FilePathRole)
@@ -1730,12 +1823,13 @@ class SampleBrowse(QtGui.QMainWindow):
             formatItem = QtGui.QStandardItem(format)
             rateItem = QtGui.QStandardItem(str(sampleRate))
             channelsItem = QtGui.QStandardItem(str(channels))
-            tagsItem = QtGui.QStandardItem(tags)
+            tagsItem = QtGui.QStandardItem()
+            tagsItem.setData(list(filter(lambda x: x, tags.split(','))), TagsRole)
             self.dbModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, tagsItem])
         self.sampleView.resizeColumnsToContents()
         self.sampleView.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
         self.sampleView.horizontalHeader().setResizeMode(1, QtGui.QHeaderView.Stretch)
-        for c in range(1, channelsColumn):
+        for c in range(2, channelsColumn + 1):
             self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
 
@@ -1844,7 +1938,7 @@ class SampleBrowse(QtGui.QMainWindow):
         if self.sampleView.model() == self.dbProxyModel:
             tagsIndex = index.sibling(index.row(), tagsColumn)
             if tagsIndex.isValid():
-                self.tagsEdit.setTags(tagsIndex.data())
+                self.tagsEdit.setTags(tagsIndex.data(TagsRole))
 
         previewData = fileIndex.data(PreviewRole)
         if not previewData:
