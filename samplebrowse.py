@@ -4,6 +4,7 @@
 import sys
 import re
 import sqlite3
+from threading import Event
 from queue import Queue
 from PyQt4 import QtCore, QtGui, QtMultimedia, uic
 import soundfile
@@ -25,6 +26,7 @@ dbColumns.update({
     })
 sampleViewColumns = browseColumns, dbColumns
 
+FormatRole = QtCore.Qt.UserRole + 1
 HoverRole = QtCore.Qt.UserRole + 1
 FilePathRole = QtCore.Qt.UserRole + 1
 InfoRole = FilePathRole + 1
@@ -126,6 +128,299 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
     def resizeEvent(self, event):
         QtGui.QTextEdit.resizeEvent(self, event)
         self.moveApplyBtn()
+
+
+class ImportDialog(QtGui.QDialog):
+    def __init__(self, parent):
+        QtGui.QDialog.__init__(self, parent)
+        uic.loadUi('importdialog.ui', self)
+        self.sampleModel = QtGui.QStandardItemModel()
+        self.sampleProxyModel = SampleSortFilterProxyModel()
+        self.sampleProxyModel.setSourceModel(self.sampleModel)
+        self.sampleView.setModel(self.sampleProxyModel)
+        self.sampleModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Tags'])
+
+
+class Crawler(QtCore.QObject):
+    currentBrowseDir = QtCore.pyqtSignal(str)
+    found = QtCore.pyqtSignal(object, object)
+    done = QtCore.pyqtSignal()
+    def __init__(self, dirPath, scanMode, formats, sampleRates, channels):
+        QtCore.QObject.__init__(self)
+        self.stop = Event()
+        self.dirPath = dirPath
+        self.scanMode = scanMode
+        self.formats = formats
+        self.sampleRates = sampleRates
+        self.channels = channels
+        self.methodList = []
+
+        if isinstance(sampleRates, (list, tuple)):
+            self.methodList.append(self.checkSampleRate)
+        if channels:
+            self.methodList.append(self.checkChannels)
+
+        if scanMode:
+            if not isinstance(formats, (list, tuple)):
+                formats = [f for f in soundfile.available_formats().keys()]
+            self.iterator = QtCore.QDirIterator(
+                dirPath, ['*.{}'.format(f) for f in formats], QtCore.QDir.Files, flags=QtCore.QDirIterator.Subdirectories|QtCore.QDirIterator.FollowSymlinks)
+#            self.run = self.runByExtension
+        else:
+            if isinstance(formats, (list, tuple)):
+                self.methodList.insert(0, self.checkFormat)
+            self.iterator = QtCore.QDirIterator(
+                dirPath, QtCore.QDir.Files, flags=QtCore.QDirIterator.Subdirectories|QtCore.QDirIterator.FollowSymlinks)
+#            self.run = self.runByAll
+
+    def checkFormat(self, info):
+        return info.format in self.formats
+
+    def checkSampleRate(self, info):
+        return info.samplerate in self.sampleRates
+
+    def checkChannels(self, info):
+        return info.channels == self.channels
+
+    def run(self):
+        while self.iterator.hasNext() and not self.stop.is_set():
+            filePath = self.iterator.next()
+            self.currentBrowseDir.emit(self.iterator.filePath())
+            try:
+                info = soundfile.info(filePath)
+                for method in self.methodList:
+                    if not method(info):
+                        break
+                else:
+                    self.found.emit(self.iterator.fileInfo(), info)
+            except:
+                pass
+        self.done.emit()
+
+#    def runByAll(self):
+#        while self.iterator.hasNext() and not self.stop.is_set():
+#            fileInfo = self.iterator.fileInfo()
+#            if fileInfo.suffix().upper() in self.forma
+#            filePath = self.iterator.next()
+
+
+class ImportDialogScan(ImportDialog):
+    def __init__(self, parent, dirPath, scanMode, formats, sampleRates, channels):
+        ImportDialog.__init__(self, parent)
+        self.elidedItemDelegate = AlignItemDelegate(QtCore.Qt.AlignLeft, QtCore.Qt.ElideMiddle)
+        self.sampleView.setItemDelegateForColumn(1, self.elidedItemDelegate)
+        self.alignCenterDelegate = AlignItemDelegate(QtCore.Qt.AlignCenter)
+        for c in range(2, channelsColumn + 1):
+            self.sampleView.setItemDelegateForColumn(c, self.alignCenterDelegate)
+
+        fontMetrics = QtGui.QFontMetrics(self.font())
+
+        self.sampleView.horizontalHeader().setResizeMode(fileNameColumn, QtGui.QHeaderView.Stretch)
+        self.sampleView.horizontalHeader().setResizeMode(dirColumn, QtGui.QHeaderView.Stretch)
+        self.sampleView.horizontalHeader().resizeSection(lengthColumn, fontMetrics.width('888.888') + 10)
+        self.sampleView.horizontalHeader().setResizeMode(lengthColumn, QtGui.QHeaderView.Fixed)
+        self.sampleView.horizontalHeader().resizeSection(formatColumn, fontMetrics.width('Format') + 10)
+        self.sampleView.horizontalHeader().setResizeMode(formatColumn, QtGui.QHeaderView.Fixed)
+        self.sampleView.horizontalHeader().resizeSection(rateColumn, fontMetrics.width('192000') + 10)
+        self.sampleView.horizontalHeader().setResizeMode(rateColumn, QtGui.QHeaderView.Fixed)
+        self.sampleView.horizontalHeader().resizeSection(channelsColumn, fontMetrics.width('Ch.') + 10)
+        self.sampleView.horizontalHeader().setResizeMode(channelsColumn, QtGui.QHeaderView.Fixed)
+
+        self.crawler = Crawler(dirPath, scanMode, formats, sampleRates, channels)
+        self.crawlerThread = QtCore.QThread()
+        self.crawler.moveToThread(self.crawlerThread)
+        self.crawlerThread.started.connect(self.crawler.run)
+        self.popup = QtGui.QMessageBox(QtGui.QMessageBox.Information, 'Scanning...', 'Scanning disk, please wait.', QtGui.QMessageBox.Cancel, self)
+        self.popup.setModal(True)
+        self.popup.rejected.connect(lambda: self.crawler.stop.set())
+        self.crawler.found.connect(self.found)
+        self.crawler.done.connect(self.popup.close)
+        self.crawler.done.connect(self.scanDone)
+
+        self.selectAllBtn.clicked.connect(self.sampleView.selectAll)
+        self.selectNoneBtn.clicked.connect(self.sampleView.clearSelection)
+        self.checkSelectedBtn.clicked.connect(lambda: self.setSelectedCheckState(QtCore.Qt.Checked))
+        self.uncheckSelectedBtn.clicked.connect(lambda: self.setSelectedCheckState(QtCore.Qt.Unchecked))
+        self.sampleProxyModel.dataChanged.connect(self.checkChecked)
+        self.sampleView.selectionModel().selectionChanged.connect(
+            lambda *args: self.editTagsBtn.setEnabled(len(self.sampleView.selectionModel().selection().indexes())))
+
+    def setEditTagsBtn(self, *args):
+        print(self.sampleView.selectionModel().selection().indexes())
+
+    def setSelectedCheckState(self, state):
+        self.sampleProxyModel.dataChanged.disconnect(self.checkChecked)
+        for index in self.sampleView.selectedIndexes():
+            if index.column() != 0:
+                continue
+            self.sampleProxyModel.setData(index, state, QtCore.Qt.CheckStateRole)
+        self.sampleProxyModel.dataChanged.connect(self.checkChecked)
+        self.checkChecked()
+
+    def checkChecked(self, *args):
+        checked = 0
+        for row in range(self.sampleModel.rowCount()):
+            if self.sampleModel.item(row, 0).checkState():
+                checked += 1
+        self.selectedLbl.setText(str(checked))
+
+    def updatePopupDir(self, dirPath):
+        self.popup.setInformativeText('Current path:\n{}'.format(dirPath[:-24]))
+
+    def found(self, fileInfo, info):
+        fileItem = QtGui.QStandardItem(fileInfo.fileName())
+        fileItem.setCheckable(True)
+        fileItem.setCheckState(QtCore.Qt.Checked)
+        dirItem = QtGui.QStandardItem(fileInfo.absolutePath())
+        dirItem.setTextAlignment(QtCore.Qt.AlignCenter)
+        lengthItem = QtGui.QStandardItem('{:.3f}'.format(float(info.frames) / info.samplerate))
+        formatItem = QtGui.QStandardItem(info.format)
+        rateItem = QtGui.QStandardItem(str(info.samplerate))
+        channelsItem = QtGui.QStandardItem(str(info.channels))
+        tagsItem = QtGui.QStandardItem()
+        self.sampleModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, tagsItem])
+        if not self.sampleModel.rowCount() % 50:
+            self.sampleView.scrollToBottom()
+            found = str(self.sampleModel.rowCount())
+            self.totalLbl.setText(found)
+            self.selectedLbl.setText(found)
+            self.popup.setInformativeText('Samples found: ' + found)
+#        self.foundSamples.append(filePath)
+#        self.popup.setDetailedText('Samples found: {}'.format(len(self.foundSamples)))
+
+    def scanDone(self):
+        try:
+            self.sampleProxyModel.dataChanged.connect(self.checkChecked)
+        except:
+            pass
+        found = str(self.sampleModel.rowCount())
+        self.totalLbl.setText(found)
+        self.selectedLbl.setText(found)
+        self.checkChecked()
+
+    def exec_(self):
+        self.sampleProxyModel.dataChanged.disconnect(self.checkChecked)
+        self.show()
+        self.popup.show()
+        self.crawlerThread.start()
+
+
+class SampleScanDialog(QtGui.QDialog):
+    def __init__(self, parent, dirName):
+        QtGui.QDialog.__init__(self, parent)
+        uic.loadUi('directoryscan.ui', self)
+        self.dirPathEdit.setText(dirName)
+        self.browseBtn.clicked.connect(self.browse)
+        self.allFormatsChk.setChecked(True)
+        self.allFormatsChk.toggled.connect(self.toggleAllFormats)
+        self.formatModel = QtGui.QStandardItemModel()
+        self.formatModel.dataChanged.connect(self.checkAllFormatsFromModel)
+        self.formatList.setModel(self.formatModel)
+        for ext in sorted(soundfile.available_formats().keys()):
+            format = soundfile.available_formats()[ext]
+            item = QtGui.QStandardItem(format)
+            item.setData(ext, FormatRole)
+            item.setCheckable(True)
+            item.setCheckState(QtCore.Qt.Checked)
+            self.formatModel.appendRow(item)
+
+        self.allSampleRatesChk.setChecked(True)
+        self.allSampleRatesChk.toggled.connect(self.toggleAllSampleRates)
+        self.sampleRatesModel = QtGui.QStandardItemModel()
+        self.sampleRatesModel.dataChanged.connect(self.checkAllSampleRatesFromModel)
+        self.sampleRatesList.setModel(self.sampleRatesModel)
+        for sr in (192000, 176400, 96000, 88200, 48000, 44100, 32000, 22050, 16000, 8000):
+            item = QtGui.QStandardItem('{:.1f} kHz'.format(sr/1000.))
+            item.setData(sr, FormatRole)
+            item.setCheckable(True)
+            item.setCheckState(QtCore.Qt.Checked)
+            self.sampleRatesModel.appendRow(item)
+
+        self.okBtn = self.buttonBox.button(self.buttonBox.Ok)
+        self.okBtn.setText('Scan')
+
+    def checkAllFormatsFromModel(self, *args):
+        self.allFormatsChk.blockSignals(True)
+        self.allFormatsChk.setChecked(self.checkAllFormats())
+        self.allFormatsChk.blockSignals(False)
+        self.checkIntegrity()
+
+    def toggleAllFormats(self, state):
+        if state == False and self.checkAllFormats():
+            self.allFormatsChk.blockSignals(True)
+            self.allFormatsChk.setChecked(True)
+            self.allFormatsChk.blockSignals(False)
+        else:
+            for row in range(self.formatModel.rowCount()):
+                self.formatModel.item(row).setCheckState(QtCore.Qt.Checked)
+
+    def checkAllFormats(self):
+        for row in range(self.formatModel.rowCount()):
+            if not self.formatModel.item(row).checkState():
+                return False
+        else:
+            return True
+
+    def checkAllSampleRatesFromModel(self, *args):
+        self.allSampleRatesChk.blockSignals(True)
+        self.allSampleRatesChk.setChecked(self.checkAllSampleRates())
+        self.allSampleRatesChk.blockSignals(False)
+        self.checkIntegrity()
+
+    def toggleAllSampleRates(self, state):
+        if state == False and self.checkAllSampleRates():
+            self.allSampleRatesChk.blockSignals(True)
+            self.allSampleRatesChk.setChecked(True)
+            self.allSampleRatesChk.blockSignals(False)
+        else:
+            for row in range(self.sampleRatesModel.rowCount()):
+                self.sampleRatesModel.item(row).setCheckState(QtCore.Qt.Checked)
+
+    def checkAllSampleRates(self):
+        for row in range(self.sampleRatesModel.rowCount()):
+            if not self.sampleRatesModel.item(row).checkState():
+                return False
+        else:
+            return True
+
+    def checkIntegrity(self):
+        for row in range(self.formatModel.rowCount()):
+            if self.formatModel.item(row).checkState():
+                break
+        else:
+            self.okBtn.setEnabled(False)
+            return
+        for row in range(self.sampleRatesModel.rowCount()):
+            if self.sampleRatesModel.item(row).checkState():
+                self.okBtn.setEnabled(True)
+                break
+        else:
+            self.okBtn.setEnabled(False)
+
+    def browse(self):
+        filePath = QtGui.QFileDialog.getExistingDirectory(self, 'Select directory', self.dirPathEdit.text())
+        if filePath:
+            self.dirPathEdit.setText(filePath)
+
+    def getFormats(self):
+        if self.allFormatsChk.isChecked():
+            return True
+        formats = []
+        for row in range(self.formatModel.rowCount()):
+            item = self.formatModel.item(row)
+            if item.checkState():
+                formats.append(item.data(FormatRole))
+        return formats
+
+    def getSampleRates(self):
+        if self.allSampleRatesChk.isChecked():
+            return True
+        sampleRates = []
+        for row in range(self.sampleRatesModel.rowCount()):
+            item = self.sampleRatesModel.item(row)
+            if item.checkState():
+                sampleRates.append(item.data(FormatRole))
+        return sampleRates
 
 
 class TagsEditorDialog(QtGui.QDialog):
@@ -892,11 +1187,10 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbProxyModel = SampleSortFilterProxyModel()
         self.dbProxyModel.setSourceModel(self.dbModel)
         self.sampleView.setModel(self.browseModel)
-        self.alignRightDelegate = AlignItemDelegate(QtCore.Qt.AlignRight)
         self.alignCenterDelegate = AlignItemDelegate(QtCore.Qt.AlignCenter)
         self.alignLeftElideMidDelegate = AlignItemDelegate(QtCore.Qt.AlignLeft, QtCore.Qt.ElideMiddle)
         self.sampleView.setItemDelegateForColumn(1, self.alignLeftElideMidDelegate)
-        for c in range(2, channelsColumn):
+        for c in range(2, channelsColumn + 1):
             self.sampleView.setItemDelegateForColumn(c, self.alignCenterDelegate)
         self.tagListDelegate = TagListDelegate(self.tagColorsDict)
         self.sampleView.setItemDelegateForColumn(tagsColumn, self.tagListDelegate)
@@ -1025,17 +1319,21 @@ class SampleBrowse(QtGui.QMainWindow):
 
     def fsViewContextMenu(self, pos):
         dirIndex = self.fsView.indexAt(pos)
+        dirName = dirIndex.data()
         dirPath = self.fsModel.filePath(self.fsProxyModel.mapToSource(dirIndex))
 
         menu = QtGui.QMenu()
-        addDirAction = QtGui.QAction('Add "{}" to favourites'.format(dirIndex.data()), menu)
+        addDirAction = QtGui.QAction('Add "{}" to favourites'.format(dirName), menu)
         for row in range(self.favouritesModel.rowCount()):
             dirPathItem = self.favouritesModel.item(row, 1)
             if dirPathItem.text() == dirPath:
                 addDirAction.setEnabled(False)
                 break
+        sep = QtGui.QAction(menu)
+        sep.setSeparator(True)
+        scanAction = QtGui.QAction('Scan "{}" for samples'.format(dirName), menu)
 
-        menu.addAction(addDirAction)
+        menu.addActions([addDirAction, sep, scanAction])
         res = menu.exec_(self.fsView.mapToGlobal(pos))
         if res == addDirAction:
             dirLabelItem = QtGui.QStandardItem(dirIndex.data())
@@ -1047,6 +1345,19 @@ class SampleBrowse(QtGui.QMainWindow):
             self.settings.beginGroup('Favourites')
             self.settings.setValue(dirIndex.data(), dirPath)
             self.settings.endGroup()
+        elif res == scanAction:
+            self.sampleScan(dirPath)
+
+    def sampleScan(self, dirPath=QtCore.QDir('.').absolutePath()):
+        scanDialog = SampleScanDialog(self, dirPath)
+        if not scanDialog.exec_():
+            return
+        dirPath = scanDialog.dirPathEdit.text()
+        scanMode = scanDialog.scanModeCombo.currentIndex()
+        formats = scanDialog.getFormats()
+        sampleRates = scanDialog.getSampleRates()
+        channels = scanDialog.channelsCombo.currentIndex()
+        res = ImportDialogScan(self, dirPath, scanMode, formats, sampleRates, channels).exec_()
 
     def favouritesDataChanged(self, index, _):
         dirPathIndex = index.sibling(index.row(), 1)
@@ -1319,7 +1630,7 @@ class SampleBrowse(QtGui.QMainWindow):
         self.sampleView.resizeColumnsToContents()
         self.sampleView.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
         self.sampleView.horizontalHeader().setResizeMode(1, QtGui.QHeaderView.Stretch)
-        for c in range(2, channelsColumn):
+        for c in range(2, channelsColumn + 1):
             self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
 
