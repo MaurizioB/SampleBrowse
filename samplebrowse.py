@@ -13,9 +13,28 @@ import numpy as np
 availableFormats = tuple(f.lower() for f in soundfile.available_formats().keys())
 availableExtensions = tuple('*.' + f for f in availableFormats)
 
-fileNameColumn, dirColumn, lengthColumn, formatColumn, rateColumn, channelsColumn, tagsColumn, previewColumn = range(8)
-_allColumns = fileNameColumn, dirColumn, lengthColumn, formatColumn, rateColumn, channelsColumn, tagsColumn, previewColumn
-_visibleColumns = fileNameColumn, lengthColumn, formatColumn, rateColumn, channelsColumn
+subtypesDict = {
+    'FLOAT': '32f', 
+    'DOUBLE': '64f', 
+    'DPCM_16': '16', 
+    'PCM_S8': 'S8', 
+    'ALAC_24': '24', 
+    'DWVW_12': '12', 
+    'PCM_U8': 'U8', 
+    'ALAC_32': '32', 
+    'PCM_32': '32', 
+    'ALAC_16': '16', 
+    'ALAC_20': '20', 
+    'DWVW_16': '16', 
+    'DWVW_24': '24', 
+    'DPCM_8': '8', 
+    'PCM_16': '16', 
+    'PCM_24': '24',
+    }
+
+fileNameColumn, dirColumn, lengthColumn, formatColumn, rateColumn, channelsColumn, subtypeColumn, tagsColumn, previewColumn = range(9)
+_allColumns = fileNameColumn, dirColumn, lengthColumn, formatColumn, rateColumn, channelsColumn, subtypeColumn, tagsColumn, previewColumn
+_visibleColumns = fileNameColumn, lengthColumn, formatColumn, rateColumn, channelsColumn, subtypeColumn
 _commonColumns = {c: True if c in _visibleColumns else False for c in _allColumns}
 browseColumns = _commonColumns.copy()
 dbColumns = _commonColumns.copy()
@@ -139,7 +158,7 @@ class ImportDialog(QtGui.QDialog):
         self.sampleProxyModel = SampleSortFilterProxyModel()
         self.sampleProxyModel.setSourceModel(self.sampleModel)
         self.sampleView.setModel(self.sampleProxyModel)
-        self.sampleModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Tags'])
+        self.sampleModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Bits', 'Tags'])
 
 
 class Crawler(QtCore.QObject):
@@ -213,6 +232,8 @@ class ImportDialogScan(ImportDialog):
         self.alignCenterDelegate = AlignItemDelegate(QtCore.Qt.AlignCenter)
         for c in range(2, channelsColumn + 1):
             self.sampleView.setItemDelegateForColumn(c, self.alignCenterDelegate)
+        self.subtypeDelegate = SubtypeDelegate()
+        self.sampleView.setItemDelegateForColumn(subtypeColumn, self.subtypeDelegate)
         self.tagListDelegate = TagListDelegate(self.parent().tagColorsDict)
         self.sampleView.setItemDelegateForColumn(tagsColumn, self.tagListDelegate)
         self.sampleView.setMouseTracking(True)
@@ -229,6 +250,8 @@ class ImportDialogScan(ImportDialog):
         self.sampleView.horizontalHeader().setResizeMode(rateColumn, QtGui.QHeaderView.Fixed)
         self.sampleView.horizontalHeader().resizeSection(channelsColumn, fontMetrics.width('Ch.') + 10)
         self.sampleView.horizontalHeader().setResizeMode(channelsColumn, QtGui.QHeaderView.Fixed)
+        self.sampleView.horizontalHeader().resizeSection(subtypeColumn, fontMetrics.width('Bits') + 12)
+        self.sampleView.horizontalHeader().setResizeMode(subtypeColumn, QtGui.QHeaderView.Fixed)
 
         self.crawler = Crawler(dirPath, scanMode, formats, sampleRates, channels)
         self.crawlerThread = QtCore.QThread()
@@ -236,7 +259,8 @@ class ImportDialogScan(ImportDialog):
         self.crawlerThread.started.connect(self.crawler.run)
         self.popup = QtGui.QMessageBox(QtGui.QMessageBox.Information, 'Scanning...', 'Scanning disk, please wait.', QtGui.QMessageBox.Cancel, self)
         self.popup.setModal(True)
-        self.popup.rejected.connect(lambda: self.crawler.stop.set())
+#        self.popup.rejected.connect(lambda: self.crawler.stop.set())
+        self.popup.button(self.popup.Cancel).clicked.connect(lambda: self.crawler.stop.set())
         self.crawler.found.connect(self.found)
         self.crawler.done.connect(self.popup.close)
         self.crawler.done.connect(self.scanDone)
@@ -334,13 +358,13 @@ class ImportDialogScan(ImportDialog):
         fileItem.setCheckable(True)
         fileItem.setCheckState(QtCore.Qt.Checked)
         dirItem = QtGui.QStandardItem(fileInfo.absolutePath())
-        dirItem.setTextAlignment(QtCore.Qt.AlignCenter)
         lengthItem = QtGui.QStandardItem('{:.3f}'.format(float(info.frames) / info.samplerate))
         formatItem = QtGui.QStandardItem(info.format)
         rateItem = QtGui.QStandardItem(str(info.samplerate))
         channelsItem = QtGui.QStandardItem(str(info.channels))
+        subtypeItem = QtGui.QStandardItem(info.subtype)
         tagsItem = QtGui.QStandardItem()
-        self.sampleModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, tagsItem])
+        self.sampleModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem, tagsItem])
         if not self.sampleModel.rowCount() % 50:
             self.sampleView.scrollToBottom()
             found = str(self.sampleModel.rowCount())
@@ -355,6 +379,7 @@ class ImportDialogScan(ImportDialog):
             self.sampleProxyModel.dataChanged.connect(self.checkChecked)
         except:
             pass
+        self.sampleView.resizeColumnsToContents()
         found = str(self.sampleModel.rowCount())
         self.totalLbl.setText(found)
         self.selectedLbl.setText(found)
@@ -690,7 +715,7 @@ class TagsModel(QtGui.QStandardItemModel):
         self.db.execute('SELECT * FROM samples WHERE tags LIKE ?', ('%{}%'.format(currentTree), ))
         count = 0
         for item in self.db.fetchall():
-            for tag in item[6].split(','):
+            for tag in item[tagsColumn].split(','):
                 if hasChildren:
                     if tag.startswith(currentTree + '/'):
                         count += 1
@@ -903,6 +928,16 @@ class TagTreeDelegate(QtGui.QStyledItemDelegate):
         return QtGui.QStyledItemDelegate.editorEvent(self, event, model, _option, index)
 
 
+class SubtypeDelegate(QtGui.QStyledItemDelegate):
+    def sizeHint(self, option, index):
+        sizeHint = QtGui.QStyledItemDelegate.sizeHint(self, option, index)
+        sizeHint.setWidth(option.fontMetrics.width('64f') + 10)
+        return sizeHint
+
+    def paint(self, painter, option, index):
+        option.text = subtypesDict.get(index.data())
+        option.displayAlignment = QtCore.Qt.AlignCenter
+        QtGui.QStyledItemDelegate.paint(self, painter, option, QtCore.QModelIndex())
 
 
 class TagListDelegate(QtGui.QStyledItemDelegate):
@@ -1278,8 +1313,10 @@ class SampleBrowse(QtGui.QMainWindow):
         self.alignCenterDelegate = AlignItemDelegate(QtCore.Qt.AlignCenter)
         self.alignLeftElideMidDelegate = AlignItemDelegate(QtCore.Qt.AlignLeft, QtCore.Qt.ElideMiddle)
         self.sampleView.setItemDelegateForColumn(1, self.alignLeftElideMidDelegate)
-        for c in range(2, channelsColumn + 1):
+        for c in range(2, subtypeColumn + 1):
             self.sampleView.setItemDelegateForColumn(c, self.alignCenterDelegate)
+        self.subtypeDelegate = SubtypeDelegate()
+        self.sampleView.setItemDelegateForColumn(subtypeColumn, self.subtypeDelegate)
         self.tagListDelegate = TagListDelegate(self.tagColorsDict)
         self.sampleView.setItemDelegateForColumn(tagsColumn, self.tagListDelegate)
         self.tagListDelegate.tagSelected.connect(self.selectTagOnTree)
@@ -1350,6 +1387,13 @@ class SampleBrowse(QtGui.QMainWindow):
             self.sampleDb.execute('CREATE table samples(filePath varchar primary key, fileName varchar, length float, format varchar, sampleRate int, channels int, tags varchar, preview blob)')
         except Exception as e:
             print(e)
+            #migrate
+            self.sampleDb.execute('PRAGMA table_info(samples)')
+            if len(self.sampleDb.fetchall()) != len(_allColumns):
+                self.sampleDb.execute('ALTER TABLE samples RENAME TO oldsamples')
+                self.sampleDb.execute('CREATE table samples(filePath varchar primary key, fileName varchar, length float, format varchar, sampleRate int, channels int, subtype varchar, tags varchar, preview blob)')
+                self.sampleDb.execute('INSERT INTO samples (filePath, fileName, length, format, sampleRate, channels, tags, preview) SELECT filePath, fileName, length, format, sampleRate, channels, tags, preview FROM oldsamples')
+                self.sampleDb.execute('DROP TABLE oldsamples')
         try:
             self.sampleDb.execute('CREATE table tagColors(tag varchar primary key, foreground varchar, background varchar)')
         except Exception as e:
@@ -1532,7 +1576,7 @@ class SampleBrowse(QtGui.QMainWindow):
             path = QtCore.QDir(path)
         self.currentBrowseDir = path
         self.browseModel.clear()
-        self.browseModel.setHorizontalHeaderLabels(['Name', None, 'Length', 'Format', 'Rate', 'Ch.', None, None])
+        self.browseModel.setHorizontalHeaderLabels(['Name', None, 'Length', 'Format', 'Rate', 'Ch.', 'Bits', None, None])
         for column, visible in browseColumns.items():
             self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
         for fileInfo in path.entryInfoList(availableExtensions, QtCore.QDir.Files):
@@ -1552,10 +1596,11 @@ class SampleBrowse(QtGui.QMainWindow):
             formatItem = QtGui.QStandardItem(info.format)
             rateItem = QtGui.QStandardItem(str(info.samplerate))
             channelsItem = QtGui.QStandardItem(str(info.channels))
-            self.browseModel.appendRow([fileItem, None, lengthItem, formatItem, rateItem, channelsItem])
+            subtypeItem = QtGui.QStandardItem(info.subtype)
+            self.browseModel.appendRow([fileItem, None, lengthItem, formatItem, rateItem, channelsItem, subtypeItem])
         self.sampleView.resizeColumnsToContents()
         self.sampleView.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
-        for c in range(1, channelsColumn):
+        for c in range(1, subtypeColumn + 1):
             self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
         self.browsePathLbl.setText(path.absolutePath())
@@ -1691,8 +1736,8 @@ class SampleBrowse(QtGui.QMainWindow):
         if not info:
             soundfile.info(filePath)
         self.sampleDb.execute(
-            'INSERT INTO samples values (?,?,?,?,?,?,?,?)', 
-            (filePath, fileName, float(info.frames) / info.samplerate, info.format, info.samplerate, info.channels, tags, preview), 
+            'INSERT INTO samples values (?,?,?,?,?,?,?,?,?)', 
+            (filePath, fileName, float(info.frames) / info.samplerate, info.format, info.samplerate, info.channels, info.subtype, tags, preview), 
             )
 
     def browseDb(self, query=None, force=True):
@@ -1706,11 +1751,11 @@ class SampleBrowse(QtGui.QMainWindow):
         self.currentDbQuery = query
         self.sampleDbUpdated = False
         self.dbModel.clear()
-        self.dbModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Tags', 'Preview'])
+        self.dbModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Bits', 'Tags', 'Preview'])
         for column, visible in dbColumns.items():
             self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
         for row in self.sampleDb.execute(query):
-            filePath, fileName, length, format, sampleRate, channels, tags, data = row
+            filePath, fileName, length, format, sampleRate, channels, subtype, tags, data = row
             fileItem = QtGui.QStandardItem(fileName)
             fileItem.setData(filePath, FilePathRole)
             dirItem = QtGui.QStandardItem(QtCore.QFileInfo(filePath).absolutePath())
@@ -1719,14 +1764,15 @@ class SampleBrowse(QtGui.QMainWindow):
             formatItem = QtGui.QStandardItem(format)
             rateItem = QtGui.QStandardItem(str(sampleRate))
             channelsItem = QtGui.QStandardItem(str(channels))
+            subtypeItem = QtGui.QStandardItem(subtype)
             tagsItem = QtGui.QStandardItem()
             tagsItem.setData(list(filter(None, tags.split(','))), TagsRole)
 #            self.dbModel.appendRow([fileItem, lengthItem, formatItem, rateItem, channelsItem, tagsItem])
-            self.dbModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, tagsItem])
+            self.dbModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem, tagsItem])
         self.sampleView.resizeColumnsToContents()
         self.sampleView.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
         self.sampleView.horizontalHeader().setResizeMode(1, QtGui.QHeaderView.Stretch)
-        for c in range(2, channelsColumn + 1):
+        for c in range(2, subtypeColumn + 1):
             self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
 
@@ -1792,7 +1838,7 @@ class SampleBrowse(QtGui.QMainWindow):
             return
         #TODO this has to be implemented along with browseDb
         self.dbModel.clear()
-        self.dbModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Tags', 'Preview'])
+        self.dbModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Bits', 'Tags', 'Preview'])
         for column, visible in dbColumns.items():
             self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
 
@@ -1807,7 +1853,7 @@ class SampleBrowse(QtGui.QMainWindow):
         hasChildren = self.dbTreeProxyModel.hasChildren(index)
         self.sampleDb.execute('SELECT * FROM samples WHERE tags LIKE ?', ('%{}%'.format(currentTag), ))
         for row in self.sampleDb.fetchall():
-            filePath, fileName, length, format, sampleRate, channels, tags, data = row
+            filePath, fileName, length, format, sampleRate, channels, subtype, tags, data = row
             if hasChildren:
                 for tag in tags.split(','):
                     if tag.startswith(currentTag):
@@ -1824,13 +1870,14 @@ class SampleBrowse(QtGui.QMainWindow):
             formatItem = QtGui.QStandardItem(format)
             rateItem = QtGui.QStandardItem(str(sampleRate))
             channelsItem = QtGui.QStandardItem(str(channels))
+            subtypeItem = QtGui.QStandardItem(subtype)
             tagsItem = QtGui.QStandardItem()
             tagsItem.setData(list(filter(None, tags.split(','))), TagsRole)
-            self.dbModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, tagsItem])
+            self.dbModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem, tagsItem])
         self.sampleView.resizeColumnsToContents()
         self.sampleView.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
         self.sampleView.horizontalHeader().setResizeMode(1, QtGui.QHeaderView.Stretch)
-        for c in range(2, channelsColumn + 1):
+        for c in range(2, subtypeColumn + 1):
             self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
 
