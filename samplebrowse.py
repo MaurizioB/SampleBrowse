@@ -130,7 +130,7 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
 
     def tags(self):
         tags = re.sub(r'\,\,+', ',', self.toPlainText()).replace('\n', ',').strip(',').split(',')
-        tags = set(tag.strip('/') for tag in tags)
+        tags = set(tag.strip('/') for tag in tags if tag)
         return sorted(tags) if tags else []
 
     def enterEvent(self, event):
@@ -638,6 +638,57 @@ class RemoveSamplesDialog(QtGui.QDialog):
         self.buttonBox.button(self.buttonBox.Cancel).clicked.connect(self.reject)
         layout.addWidget(self.buttonBox)
 
+
+class DbTreeView(QtGui.QTreeView):
+    samplesAddedToTag = QtCore.pyqtSignal(object, str)
+    def __init__(self, *args, **kwargs):
+        QtGui.QTreeView.__init__(self, *args, **kwargs)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        if 'application/x-qabstractitemmodeldatalist' in event.mimeData().formats():
+            event.accept()
+
+    def dragMoveEvent(self, event):
+        currentTagIndex = self.indexAt(event.pos())
+        if not currentTagIndex.isValid() or currentTagIndex == self.model().index(0, 0):
+            event.ignore()
+            return
+        if currentTagIndex == self.model().index(0, 0):
+            event.ignore()
+        else:
+            event.accept()
+
+    def dropEvent(self, event):
+        currentTagIndex = self.indexAt(event.pos())
+        if not currentTagIndex.isValid() or currentTagIndex == self.model().index(0, 0):
+            event.ignore()
+            return
+        event.accept()
+
+        itemsDict = {}
+        data = event.mimeData().data('application/x-qabstractitemmodeldatalist')
+        stream = QtCore.QDataStream(data)
+        while not stream.atEnd():
+            row = stream.readInt32()
+            if not row in itemsDict:
+                itemsDict[row] = {}
+            #column is ignored
+            stream.readInt32()
+            items = stream.readInt32()
+            for i in range(items):
+                key = stream.readInt32()
+                value = stream.readQVariant()
+                itemsDict[row][key] = value
+        sampleList = [row[FilePathRole] for row in itemsDict.values()]
+        currentTag = currentTagIndex.data()
+        parentIndex = currentTagIndex.parent()
+        while parentIndex != self.model().index(0, 0):
+            currentTag = '{}/{}'.format(parentIndex.data(), currentTag)
+            parentIndex = parentIndex.parent()
+        self.samplesAddedToTag.emit(sampleList, currentTag)
+
+
 class TagsModel(QtGui.QStandardItemModel):
     def __init__(self, db, *args, **kwargs):
         QtGui.QStandardItemModel.__init__(self, *args, **kwargs)
@@ -938,6 +989,7 @@ class SubtypeDelegate(QtGui.QStyledItemDelegate):
         option.text = subtypesDict.get(index.data())
         option.displayAlignment = QtCore.Qt.AlignCenter
         QtGui.QStyledItemDelegate.paint(self, painter, option, QtCore.QModelIndex())
+
 
 
 class TagListDelegate(QtGui.QStyledItemDelegate):
@@ -1289,7 +1341,8 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbWidget = QtGui.QWidget()
         dbLayout = QtGui.QGridLayout()
         self.dbWidget.setLayout(dbLayout)
-        self.dbTreeView = QtGui.QTreeView()
+        self.dbTreeView = DbTreeView()
+        self.dbTreeView.samplesAddedToTag.connect(self.addSamplesToTag)
         self.tagTreeDelegate = TagTreeDelegate()
         self.tagTreeDelegate.tagColorsChanged.connect(self.saveTagColors)
         self.dbTreeView.setItemDelegateForColumn(0, self.tagTreeDelegate)
@@ -1880,6 +1933,21 @@ class SampleBrowse(QtGui.QMainWindow):
         for c in range(2, subtypeColumn + 1):
             self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
+
+    def addSamplesToTag(self, sampleList, newTag):
+        for filePath in sampleList:
+            self.sampleDb.execute('SELECT tags FROM samples WHERE filePath=?', (filePath, ))
+            tags = set(filter(None, self.sampleDb.fetchone()[0].split(',')))
+            tags.add(newTag)
+            self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (','.join(tags), filePath))
+            sampleMatch = self.dbModel.match(self.dbModel.index(0, 0), FilePathRole, filePath, flags=QtCore.Qt.MatchExactly)
+            if sampleMatch:
+                fileIndex = sampleMatch[0]
+                tagsIndex = fileIndex.sibling(fileIndex.row(), tagsColumn)
+                self.dbModel.setData(tagsIndex, tags, TagsRole)
+        self.sampleView.viewport().update()
+        self.dbConn.commit()
+        self.reloadTags()
 
     def toggleBrowser(self, index):
         self.browserStackedLayout.setCurrentIndex(index)
