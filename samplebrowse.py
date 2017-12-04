@@ -46,8 +46,8 @@ dbColumns.update({
 sampleViewColumns = browseColumns, dbColumns
 
 FormatRole = QtCore.Qt.UserRole + 1
-HoverRole = QtCore.Qt.UserRole + 1
-FilePathRole = QtCore.Qt.UserRole + 1
+HoverRole = FormatRole + 1
+FilePathRole = HoverRole + 1
 InfoRole = FilePathRole + 1
 WaveRole = InfoRole + 1
 TagsRole = WaveRole + 1
@@ -364,6 +364,7 @@ class ImportDialogScan(ImportDialog):
         channelsItem = QtGui.QStandardItem(str(info.channels))
         subtypeItem = QtGui.QStandardItem(info.subtype)
         tagsItem = QtGui.QStandardItem()
+        tagsItem.setData([], TagsRole)
         self.sampleModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem, tagsItem])
         if not self.sampleModel.rowCount() % 50:
             self.sampleView.scrollToBottom()
@@ -639,27 +640,79 @@ class RemoveSamplesDialog(QtGui.QDialog):
         layout.addWidget(self.buttonBox)
 
 
+class DropTimer(QtCore.QTimer):
+    expandIndex = QtCore.pyqtSignal(object)
+    def __init__(self):
+        QtCore.QTimer.__init__(self)
+        self.setInterval(500)
+        self.setSingleShot(True)
+        self.currentIndex = None
+        self.timeout.connect(self.expandEmit)
+
+    def expandEmit(self):
+        if self.currentIndex:
+            self.expandIndex.emit(self.currentIndex)
+            self.currentIndex = None
+#        self.expandIndex.emit(self.currentIndex) if self.currentIndex else None
+
+    def start(self, index):
+        if not index:
+            self.stop()
+            return
+        if index == self.currentIndex:
+            return
+        self.currentIndex = index
+        QtCore.QTimer.start(self)
+
+
 class DbTreeView(QtGui.QTreeView):
     samplesAddedToTag = QtCore.pyqtSignal(object, str)
     def __init__(self, *args, **kwargs):
         QtGui.QTreeView.__init__(self, *args, **kwargs)
         self.setAcceptDrops(True)
+        #something is wrong with setAutoExpandDelay, we use a custom QTimer
+        self.dropTimer = QtCore.QTimer()
+        self.dropTimer.setInterval(500)
+        self.dropTimer.setSingleShot(True)
+        self.dropTimer.timeout.connect(self.expandDrag)
+        self.currentTagIndex = None
+
+    def expandDrag(self):
+        if not (self.currentTagIndex and self.currentTagIndex.isValid()):
+            return
+        if not self.isExpanded(self.currentTagIndex):
+            self.expand(self.currentTagIndex)
+        else:
+            self.collapse(self.currentTagIndex)
 
     def dragEnterEvent(self, event):
         if 'application/x-qabstractitemmodeldatalist' in event.mimeData().formats():
             event.accept()
+            currentTagIndex = self.indexAt(event.pos())
+            if currentTagIndex.isValid() and currentTagIndex != self.model().index(0, 0):
+                self.currentTagIndex = currentTagIndex
+                self.dropTimer.start()
 
     def dragMoveEvent(self, event):
         currentTagIndex = self.indexAt(event.pos())
         if not currentTagIndex.isValid() or currentTagIndex == self.model().index(0, 0):
+            self.currentTagIndex = None
+            self.dropTimer.stop()
             event.ignore()
             return
-        if currentTagIndex == self.model().index(0, 0):
-            event.ignore()
         else:
             event.accept()
+            if currentTagIndex != self.currentTagIndex:
+                self.currentTagIndex = currentTagIndex
+                self.dropTimer.start()
+
+    def dragLeaveEvent(self, event):
+        self.currentTagIndex = None
+        self.dropTimer.stop()
+        event.accept()
 
     def dropEvent(self, event):
+        self.dropTimer.stop()
         currentTagIndex = self.indexAt(event.pos())
         if not currentTagIndex.isValid() or currentTagIndex == self.model().index(0, 0):
             event.ignore()
@@ -690,12 +743,14 @@ class DbTreeView(QtGui.QTreeView):
 
 
 class TagsModel(QtGui.QStandardItemModel):
+    tagRenamed = QtCore.pyqtSignal(str, str)
     def __init__(self, db, *args, **kwargs):
         QtGui.QStandardItemModel.__init__(self, *args, **kwargs)
         self.db = db
         self.totalCountItem = QtGui.QStandardItem('0')
         self.appendRow([QtGui.QStandardItem('All samples'), self.totalCountItem])
         self.tags = set()
+        self.dataChanged.connect(self.updateTags)
 
     def indexFromPath(self, path):
         tagTree = path.split('/')
@@ -710,6 +765,7 @@ class TagsModel(QtGui.QStandardItemModel):
         return current
 
     def setTags(self, tags):
+        self.dataChanged.disconnect(self.updateTags)
         tags = set(tags)
         try:
             tags.remove('')
@@ -724,6 +780,7 @@ class TagsModel(QtGui.QStandardItemModel):
         for tag in self.tags ^ currentTags:
             self.clearTag(tag.split('/'), 0)
         self.tags = tags
+        self.dataChanged.connect(self.updateTags)
 
     def clearTag(self, tagTree, depth, parentItem=None):
 #        return
@@ -794,6 +851,26 @@ class TagsModel(QtGui.QStandardItemModel):
 #        if len(tagTree[depth:]) > 1:
         if hasChildren:
             self.checkAndCreateTags(tagTree, depth + 1, childItem)
+
+    def updateTags(self, index, _):
+        self.dataChanged.disconnect(self.updateTags)
+        if not index.data(TagsRole) or index.data() == index.data(TagsRole):
+            #check model editing status
+            self.setData(index, None, TagsRole)
+            self.dataChanged.connect(self.updateTags)
+            return
+        currentNewTag = index.data()
+        currentOldTag = index.data(TagsRole)
+        self.setData(index, None, TagsRole)
+        parent = index.parent()
+        while parent != self.index(0, 0):
+            currentNewTag = '{}/{}'.format(parent.data(), currentNewTag)
+            currentOldTag = '{}/{}'.format(parent.data(), currentOldTag)
+            parent = parent.parent()
+        self.tagRenamed.emit(currentNewTag, currentOldTag)
+        self.setData(index, None, TagsRole)
+        self.dataChanged.connect(self.updateTags)
+
 
 class EllipsisLabel(QtGui.QLabel):
     def __init__(self, *args, **kwargs):
@@ -961,12 +1038,14 @@ class TagColorDialog(QtGui.QDialog):
 
 class TagTreeDelegate(QtGui.QStyledItemDelegate):
     tagColorsChanged = QtCore.pyqtSignal(object, object, object)
+    startEditTag = QtCore.pyqtSignal(object)
     def editorEvent(self, event, model, _option, index):
         if event.type() == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.RightButton:
             if index != model.index(0, 0):
                 menu = QtGui.QMenu()
+                editTagAction = QtGui.QAction('Rename tag...', menu)
                 editColorAction = QtGui.QAction('Edit tag color...', menu)
-                menu.addAction(editColorAction)
+                menu.addActions([editTagAction, editColorAction])
                 res = menu.exec_(_option.widget.viewport().mapToGlobal(event.pos()))
                 if res == editColorAction:
                     colorDialog = TagColorDialog(_option.widget.window(), index)
@@ -974,9 +1053,21 @@ class TagTreeDelegate(QtGui.QStyledItemDelegate):
                         model.setData(index, colorDialog.foregroundColor, QtCore.Qt.ForegroundRole)
                         model.setData(index, colorDialog.backgroundColor, QtCore.Qt.BackgroundRole)
                         self.tagColorsChanged.emit(index, colorDialog.foregroundColor, colorDialog.backgroundColor)
+                elif res == editTagAction:
+                    self.startEditTag.emit(index)
                 return True
             return True
         return QtGui.QStyledItemDelegate.editorEvent(self, event, model, _option, index)
+
+    def createEditor(self, parent, option, index):
+        widget = QtGui.QStyledItemDelegate.createEditor(self, parent, option, index)
+        widget.setValidator(QtGui.QRegExpValidator(QtCore.QRegExp(r'[^\/,]+')))
+        return widget
+
+    def setModelData(self, widget, model, index):
+        if not widget.text():
+            return
+        QtGui.QStyledItemDelegate.setModelData(self, widget, model, index)
 
 
 class SubtypeDelegate(QtGui.QStyledItemDelegate):
@@ -989,7 +1080,6 @@ class SubtypeDelegate(QtGui.QStyledItemDelegate):
         option.text = subtypesDict.get(index.data())
         option.displayAlignment = QtCore.Qt.AlignCenter
         QtGui.QStyledItemDelegate.paint(self, painter, option, QtCore.QModelIndex())
-
 
 
 class TagListDelegate(QtGui.QStyledItemDelegate):
@@ -1261,6 +1351,65 @@ class Player(QtCore.QObject):
         self.audioQueue.put(array)
 
 
+class SampleView(QtGui.QTableView):
+    def viewportEvent(self, event):
+        if event.type() == QtCore.QEvent.ToolTip:
+            index = self.indexAt(event.pos())
+            if index.isValid():
+                fileIndex = index.sibling(index.row(), 0)
+                fileName = fileIndex.data()
+                filePath = fileIndex.data(FilePathRole)
+                dirIndex = index.sibling(index.row(), dirColumn)
+                dir = dirIndex.data() if dirIndex.data() else '?'
+                info = fileIndex.data(InfoRole)
+                tags = index.sibling(index.row(), tagsColumn).data(TagsRole)
+                if tags:
+                    tagsText = '<br/><h4>Tags:</h4><ul><li>{}</li></ul>'.format('</li><li>'.join(tags))
+                else:
+                    tagsText = ''
+                if not info:
+                    info = soundfile.info(filePath)
+                self.setToolTip('''
+                    <h3>{fileName}</h3>
+                    <table>
+                        <tr>
+                            <td>Path:</td>
+                            <td>{dir}</td>
+                        </tr>
+                        <tr>
+                            <td>Length:</td>
+                            <td>{length:.03f}</td>
+                        </tr>
+                        <tr>
+                            <td>Format:</td>
+                            <td>{format} ({subtype})</td>
+                        </tr>
+                        <tr>
+                            <td>Sample rate:</td>
+                            <td>{sampleRate}</td>
+                        </tr>
+                        <tr>
+                            <td>Channels:</td>
+                            <td>{channels}</td>
+                        </tr>
+                    </table>
+                    {tags}
+                    '''.format(
+                        fileName=fileName, 
+                        dir=dir, 
+                        length=float(info.frames) / info.samplerate, 
+                        format=info.format, 
+                        sampleRate=info.samplerate, 
+                        channels=info.channels, 
+                        subtype=subtypesDict.get(info.subtype, info.subtype), 
+                        tags=tagsText, 
+                        )
+                    )
+            else:
+                self.setToolTip('')
+                QtGui.QToolTip.showText(event.pos(), '')
+        return QtGui.QTableView.viewportEvent(self, event)
+
 
 class SampleBrowse(QtGui.QMainWindow):
     def __init__(self):
@@ -1345,11 +1494,13 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbTreeView.samplesAddedToTag.connect(self.addSamplesToTag)
         self.tagTreeDelegate = TagTreeDelegate()
         self.tagTreeDelegate.tagColorsChanged.connect(self.saveTagColors)
+        self.tagTreeDelegate.startEditTag.connect(self.renameTag)
         self.dbTreeView.setItemDelegateForColumn(0, self.tagTreeDelegate)
         self.dbTreeView.setEditTriggers(self.dbTreeView.NoEditTriggers)
         self.dbTreeView.header().setStretchLastSection(False)
         self.dbTreeView.setHeaderHidden(True)
         self.dbTreeModel = TagsModel(self.sampleDb)
+        self.dbTreeModel.tagRenamed.connect(self.tagRenamed)
         self.dbTreeProxyModel = QtGui.QSortFilterProxyModel()
         self.dbTreeProxyModel.setSourceModel(self.dbTreeModel)
         self.dbTreeView.setModel(self.dbTreeProxyModel)
@@ -1617,6 +1768,7 @@ class SampleBrowse(QtGui.QMainWindow):
     def dirChanged(self, index):
         self.browse(self.fsModel.filePath(self.fsProxyModel.mapToSource(index)))
 
+    
     def browse(self, path=None):
         if path is None:
             if self.currentBrowseDir:
@@ -1645,12 +1797,13 @@ class SampleBrowse(QtGui.QMainWindow):
             except Exception as e:
 #                print e
                 continue
+            dirItem = QtGui.QStandardItem(fileInfo.absolutePath())
             lengthItem = QtGui.QStandardItem('{:.3f}'.format(float(info.frames) / info.samplerate))
             formatItem = QtGui.QStandardItem(info.format)
             rateItem = QtGui.QStandardItem(str(info.samplerate))
             channelsItem = QtGui.QStandardItem(str(info.channels))
             subtypeItem = QtGui.QStandardItem(info.subtype)
-            self.browseModel.appendRow([fileItem, None, lengthItem, formatItem, rateItem, channelsItem, subtypeItem])
+            self.browseModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem])
         self.sampleView.resizeColumnsToContents()
         self.sampleView.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
         for c in range(1, subtypeColumn + 1):
@@ -1789,7 +1942,7 @@ class SampleBrowse(QtGui.QMainWindow):
         if not info:
             soundfile.info(filePath)
         self.sampleDb.execute(
-            'INSERT INTO samples values (?,?,?,?,?,?,?,?,?)', 
+            'INSERT OR REPLACE INTO samples values (?,?,?,?,?,?,?,?,?)', 
             (filePath, fileName, float(info.frames) / info.samplerate, info.format, info.samplerate, info.channels, info.subtype, tags, preview), 
             )
 
@@ -1872,6 +2025,44 @@ class SampleBrowse(QtGui.QMainWindow):
             self.tagColorsDict[tag] = foregroundColor, backgroundColor
         self.dbConn.commit()
         self.sampleView.viewport().update()
+
+    def tagRenamed(self, newTag, oldTag):
+        newTagTree = newTag.split('/')
+        oldTagTree = oldTag.split('/')
+        for depth, (new, old) in enumerate(zip(newTagTree, oldTagTree), 1):
+            if new != old:
+                break
+        else:
+            return
+        newTag = '/'.join(newTagTree[:depth])
+        oldTag = '/'.join(oldTagTree[:depth])
+        self.sampleDb.execute('SELECT filePath,tags FROM samples WHERE tags LIKE ?', ('%{}%'.format(oldTag), ))
+        for filePath, tags in self.sampleDb.fetchall():
+            tags = tags.split(',')
+            newTags = set()
+            for tag in tags:
+                if tag == oldTag:
+                    newTags.add(newTag)
+                elif tag.startswith('{}/'.format(oldTag)):
+                    newTags.add('{}/{}'.format(newTag, tag[len(oldTag):]))
+                else:
+                    newTags.add(tag)
+            self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (','.join(sorted(newTags)), filePath))
+            sampleMatch = self.dbModel.match(self.dbModel.index(0, 0), FilePathRole, filePath, flags=QtCore.Qt.MatchExactly)
+            if not sampleMatch:
+                continue
+            fileIndex = sampleMatch[0]
+            tagsIndex = fileIndex.sibling(fileIndex.row(), tagsColumn)
+            self.dbModel.setData(tagsIndex, sorted(newTags), TagsRole)
+
+    def renameTag(self, index):
+        changing = self.dbTreeView.edit(index, self.dbTreeView.AllEditTriggers, QtCore.QEvent(QtCore.QEvent.None_))
+        self.dbTreeModel.blockSignals(True)
+        if not changing:
+            self.dbTreeProxyModel.setData(index, None, TagsRole)
+        else:
+            self.dbTreeProxyModel.setData(index, index.data(), TagsRole)
+        self.dbTreeModel.blockSignals(False)
 
     def reloadTags(self):
         self.sampleDb.execute('SELECT tags FROM samples')

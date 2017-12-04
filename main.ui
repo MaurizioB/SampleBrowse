@@ -154,7 +154,7 @@
       <widget class="QWidget" name="verticalLayoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout">
         <item>
-         <widget class="QTableView" name="sampleView">
+         <widget class="SampleView" name="sampleView">
           <property name="contextMenuPolicy">
            <enum>Qt::CustomContextMenu</enum>
           </property>
@@ -371,6 +371,11 @@
   <customwidget>
    <class>TagsEditorTextEdit</class>
    <extends>QTextEdit</extends>
+   <header>samplebrowse</header>
+  </customwidget>
+  <customwidget>
+   <class>SampleView</class>
+   <extends>QTableView</extends>
    <header>samplebrowse</header>
   </customwidget>
  </customwidgets>
