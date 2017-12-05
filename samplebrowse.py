@@ -160,73 +160,6 @@ class ImportDialog(QtGui.QDialog):
         self.sampleView.setModel(self.sampleProxyModel)
         self.sampleModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Bits', 'Tags'])
 
-
-class Crawler(QtCore.QObject):
-    currentBrowseDir = QtCore.pyqtSignal(str)
-    found = QtCore.pyqtSignal(object, object)
-    done = QtCore.pyqtSignal()
-    def __init__(self, dirPath, scanMode, formats, sampleRates, channels):
-        QtCore.QObject.__init__(self)
-        self.stop = Event()
-        self.dirPath = dirPath
-        self.scanMode = scanMode
-        self.formats = formats
-        self.sampleRates = sampleRates
-        self.channels = channels
-        self.methodList = []
-
-        if isinstance(sampleRates, (list, tuple)):
-            self.methodList.append(self.checkSampleRate)
-        if channels:
-            self.methodList.append(self.checkChannels)
-
-        if scanMode:
-            if not isinstance(formats, (list, tuple)):
-                formats = [f for f in soundfile.available_formats().keys()]
-            self.iterator = QtCore.QDirIterator(
-                dirPath, ['*.{}'.format(f) for f in formats], QtCore.QDir.Files, flags=QtCore.QDirIterator.Subdirectories|QtCore.QDirIterator.FollowSymlinks)
-#            self.run = self.runByExtension
-        else:
-            if isinstance(formats, (list, tuple)):
-                self.methodList.insert(0, self.checkFormat)
-            self.iterator = QtCore.QDirIterator(
-                dirPath, QtCore.QDir.Files, flags=QtCore.QDirIterator.Subdirectories|QtCore.QDirIterator.FollowSymlinks)
-#            self.run = self.runByAll
-
-    def checkFormat(self, info):
-        return info.format in self.formats
-
-    def checkSampleRate(self, info):
-        return info.samplerate in self.sampleRates
-
-    def checkChannels(self, info):
-        return info.channels == self.channels
-
-    def run(self):
-        while self.iterator.hasNext() and not self.stop.is_set():
-            filePath = self.iterator.next()
-            self.currentBrowseDir.emit(self.iterator.filePath())
-            try:
-                info = soundfile.info(filePath)
-                for method in self.methodList:
-                    if not method(info):
-                        break
-                else:
-                    self.found.emit(self.iterator.fileInfo(), info)
-            except:
-                pass
-        self.done.emit()
-
-#    def runByAll(self):
-#        while self.iterator.hasNext() and not self.stop.is_set():
-#            fileInfo = self.iterator.fileInfo()
-#            if fileInfo.suffix().upper() in self.forma
-#            filePath = self.iterator.next()
-
-
-class ImportDialogScan(ImportDialog):
-    def __init__(self, parent, dirPath, scanMode, formats, sampleRates, channels):
-        ImportDialog.__init__(self, parent)
         self.elidedItemDelegate = AlignItemDelegate(QtCore.Qt.AlignLeft, QtCore.Qt.ElideMiddle)
         self.sampleView.setItemDelegateForColumn(1, self.elidedItemDelegate)
         self.alignCenterDelegate = AlignItemDelegate(QtCore.Qt.AlignCenter)
@@ -252,18 +185,6 @@ class ImportDialogScan(ImportDialog):
         self.sampleView.horizontalHeader().setResizeMode(channelsColumn, QtGui.QHeaderView.Fixed)
         self.sampleView.horizontalHeader().resizeSection(subtypeColumn, fontMetrics.width('Bits') + 12)
         self.sampleView.horizontalHeader().setResizeMode(subtypeColumn, QtGui.QHeaderView.Fixed)
-
-        self.crawler = Crawler(dirPath, scanMode, formats, sampleRates, channels)
-        self.crawlerThread = QtCore.QThread()
-        self.crawler.moveToThread(self.crawlerThread)
-        self.crawlerThread.started.connect(self.crawler.run)
-        self.popup = QtGui.QMessageBox(QtGui.QMessageBox.Information, 'Scanning...', 'Scanning disk, please wait.', QtGui.QMessageBox.Cancel, self)
-        self.popup.setModal(True)
-#        self.popup.rejected.connect(lambda: self.crawler.stop.set())
-        self.popup.button(self.popup.Cancel).clicked.connect(lambda: self.crawler.stop.set())
-        self.crawler.found.connect(self.found)
-        self.crawler.done.connect(self.popup.close)
-        self.crawler.done.connect(self.scanDone)
 
         self.selectAllBtn.clicked.connect(self.sampleView.selectAll)
         self.checkSelectedBtn.clicked.connect(lambda: self.setSelectedCheckState(QtCore.Qt.Checked))
@@ -298,7 +219,6 @@ class ImportDialogScan(ImportDialog):
             return
         for index in indexes:
             self.sampleProxyModel.setData(index, res, TagsRole)
-        
 
     def sampleContextMenu(self, pos):
         menu = QtGui.QMenu()
@@ -348,6 +268,132 @@ class ImportDialogScan(ImportDialog):
                 checked += 1
         self.selectedLbl.setText(str(checked))
 
+    def exec_(self):
+        res = QtGui.QDialog.exec_(self)
+        if res:
+            sampleList = []
+            for row in range(self.sampleModel.rowCount()):
+                fileItem = self.sampleModel.item(row, 0)
+                if not fileItem.checkState():
+                    continue
+                fileName = fileItem.text()
+                filePath = fileItem.data(FilePathRole)
+                info = fileItem.data(InfoRole)
+                tags = self.sampleModel.item(row, tagsColumn).data(TagsRole)
+                sampleList.append((filePath, fileName, info, tags))
+            return sampleList
+        else:
+            return res
+
+class MultiDirIterator(object):
+    def __init__(self, dirList, *args, **kwargs):
+        self.dirList = dirList
+        iteratorList = []
+        for dir in dirList:
+            iteratorList.append(QtCore.QDirIterator(dir, *args, **kwargs))
+        self.iterators = iter(iteratorList)
+        self.currentIterator = self.iterators.next()
+
+    def hasNext(self):
+        if self.currentIterator.hasNext():
+            return True
+        try:
+            self.currentIterator = self.iterators.next()
+            return self.hasNext()
+        except:
+            return False
+
+    def next(self):
+        next = self.currentIterator.next()
+        if next:
+            return next
+        if self.hasNext():
+            return self.next()
+        else:
+            return False
+
+
+class DirIterator(object):
+    def __new__(self, dirList, *args, **kwargs):
+        if isinstance(dirList, str):
+            return QtCore.QDirIterator(dirList, *args, **kwargs)
+        if len(dirList) == 1:
+            return QtCore.QDirIterator(dirList[0], *args, **kwargs)
+        return MultiDirIterator(self, dirList, *args, **kwargs)
+
+class Crawler(QtCore.QObject):
+    currentBrowseDir = QtCore.pyqtSignal(str)
+    found = QtCore.pyqtSignal(object, object)
+    done = QtCore.pyqtSignal()
+    def __init__(self, dirPath, scanMode, formats, sampleRates, channels):
+        QtCore.QObject.__init__(self)
+        self.stop = Event()
+        self.dirPath = dirPath
+        self.scanMode = scanMode
+        self.formats = formats
+        self.sampleRates = sampleRates
+        self.channels = channels
+        self.methodList = []
+
+        if isinstance(sampleRates, (list, tuple)):
+            self.methodList.append(self.checkSampleRate)
+        if channels:
+            self.methodList.append(self.checkChannels)
+
+        if scanMode:
+            if not isinstance(formats, (list, tuple)):
+                formats = [f for f in soundfile.available_formats().keys()]
+            self.iterator = DirIterator(
+                dirPath, ['*.{}'.format(f) for f in formats], QtCore.QDir.Files, flags=QtCore.QDirIterator.Subdirectories|QtCore.QDirIterator.FollowSymlinks)
+#            self.run = self.runByExtension
+        else:
+            if isinstance(formats, (list, tuple)):
+                self.methodList.insert(0, self.checkFormat)
+            self.iterator = DirIterator(
+                dirPath, QtCore.QDir.Files, flags=QtCore.QDirIterator.Subdirectories|QtCore.QDirIterator.FollowSymlinks)
+#            self.run = self.runByAll
+
+    def checkFormat(self, info):
+        return info.format in self.formats
+
+    def checkSampleRate(self, info):
+        return info.samplerate in self.sampleRates
+
+    def checkChannels(self, info):
+        return info.channels == self.channels
+
+    def run(self):
+        while self.iterator.hasNext() and not self.stop.is_set():
+            filePath = self.iterator.next()
+            self.currentBrowseDir.emit(self.iterator.filePath())
+            try:
+                info = soundfile.info(filePath)
+                for method in self.methodList:
+                    if not method(info):
+                        break
+                else:
+                    self.found.emit(self.iterator.fileInfo(), info)
+            except:
+                pass
+        self.done.emit()
+
+
+class ImportDialogScan(ImportDialog):
+    def __init__(self, parent, dirList, scanMode, formats, sampleRates, channels):
+        ImportDialog.__init__(self, parent)
+        self.crawler = Crawler(dirList, scanMode, formats, sampleRates, channels)
+        self.crawlerThread = QtCore.QThread()
+        self.crawler.moveToThread(self.crawlerThread)
+        self.crawlerThread.started.connect(self.crawler.run)
+        self.popup = QtGui.QMessageBox(QtGui.QMessageBox.Information, 'Scanning...', 'Scanning disk, please wait.', QtGui.QMessageBox.Cancel, self)
+        self.popup.setModal(True)
+#        self.popup.rejected.connect(lambda: self.crawler.stop.set())
+        self.popup.button(self.popup.Cancel).clicked.connect(lambda: self.crawler.stop.set())
+        self.crawler.found.connect(self.found)
+        self.crawler.done.connect(self.popup.close)
+        self.crawler.done.connect(self.scanDone)
+        self.defaultTags = []
+
     def updatePopupDir(self, dirPath):
         self.popup.setInformativeText('Current path:\n{}'.format(dirPath[:-24]))
 
@@ -364,7 +410,7 @@ class ImportDialogScan(ImportDialog):
         channelsItem = QtGui.QStandardItem(str(info.channels))
         subtypeItem = QtGui.QStandardItem(info.subtype)
         tagsItem = QtGui.QStandardItem()
-        tagsItem.setData([], TagsRole)
+        tagsItem.setData(self.defaultTags, TagsRole)
         self.sampleModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem, tagsItem])
         if not self.sampleModel.rowCount() % 50:
             self.sampleView.scrollToBottom()
@@ -391,28 +437,57 @@ class ImportDialogScan(ImportDialog):
         self.show()
         self.popup.show()
         self.crawlerThread.start()
-        res = QtGui.QDialog.exec_(self)
-        if res:
-            sampleList = []
-            for row in range(self.sampleModel.rowCount()):
-                fileItem = self.sampleModel.item(row, 0)
-                if not fileItem.checkState():
-                    continue
-                fileName = fileItem.text()
-                filePath = fileItem.data(FilePathRole)
-                info = fileItem.data(InfoRole)
-                tags = self.sampleModel.item(row, tagsColumn).data(TagsRole)
-                sampleList.append((filePath, fileName, info, tags))
-            return sampleList
+        return ImportDialog.exec_(self)
+
+
+class ImportDialogScanDnD(ImportDialogScan):
+    def __init__(self, parent, dirList, fileList, scanMode, formats, sampleRates, channels, tag):
+        if dirList:
+            ImportDialogScan.__init__(self, parent, dirList, scanMode, formats, sampleRates, channels)
+            self.defaultTags = [tag]
         else:
-            return res
+            ImportDialog.__init__(self, parent)
+        unknownFiles = []
+        self.dirList = dirList
+        for filePath in fileList:
+            try:
+                info = soundfile.info(filePath)
+            except:
+                unknownFiles.append(filePath)
+                continue
+            fileInfo = QtCore.QFileInfo(filePath)
+            fileItem = QtGui.QStandardItem(fileInfo.fileName())
+            fileItem.setData(filePath, FilePathRole)
+            fileItem.setData(info, InfoRole)
+            fileItem.setCheckable(True)
+            fileItem.setCheckState(QtCore.Qt.Checked)
+            dirItem = QtGui.QStandardItem(fileInfo.absolutePath())
+            lengthItem = QtGui.QStandardItem('{:.3f}'.format(float(info.frames) / info.samplerate))
+            formatItem = QtGui.QStandardItem(info.format)
+            rateItem = QtGui.QStandardItem(str(info.samplerate))
+            channelsItem = QtGui.QStandardItem(str(info.channels))
+            subtypeItem = QtGui.QStandardItem(info.subtype)
+            tagsItem = QtGui.QStandardItem()
+            tagsItem.setData([tag], TagsRole)
+            self.sampleModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem, tagsItem])
+
+    def exec_(self):
+        if self.sampleModel.rowCount() == 0 and not self.dirList:
+            return 0
+        if self.dirList:
+            return ImportDialogScan.exec_(self)
+        else:
+            return ImportDialog.exec_(self)
 
 
 class SampleScanDialog(QtGui.QDialog):
-    def __init__(self, parent, dirName):
+    def __init__(self, parent, dirName=None):
         QtGui.QDialog.__init__(self, parent)
         uic.loadUi('directoryscan.ui', self)
-        self.dirPathEdit.setText(dirName)
+        if dirName:
+            self.dirPathEdit.setText(dirName)
+        else:
+            self.dirNameFrame.setVisible(False)
         self.browseBtn.clicked.connect(self.browse)
         self.allFormatsChk.setChecked(True)
         self.allFormatsChk.toggled.connect(self.toggleAllFormats)
@@ -667,8 +742,10 @@ class DropTimer(QtCore.QTimer):
 
 class DbTreeView(QtGui.QTreeView):
     samplesAddedToTag = QtCore.pyqtSignal(object, str)
-    def __init__(self, *args, **kwargs):
+    samplesImported = QtCore.pyqtSignal(object, object)
+    def __init__(self, main, *args, **kwargs):
         QtGui.QTreeView.__init__(self, *args, **kwargs)
+        self.main = main
         self.setAcceptDrops(True)
         #something is wrong with setAutoExpandDelay, we use a custom QTimer
         self.dropTimer = QtCore.QTimer()
@@ -686,25 +763,36 @@ class DbTreeView(QtGui.QTreeView):
             self.collapse(self.currentTagIndex)
 
     def dragEnterEvent(self, event):
-        if 'application/x-qabstractitemmodeldatalist' in event.mimeData().formats():
+        formats = event.mimeData().formats()
+        if 'application/x-qabstractitemmodeldatalist' in formats:
             event.accept()
             currentTagIndex = self.indexAt(event.pos())
-            if currentTagIndex.isValid() and currentTagIndex != self.model().index(0, 0):
+            if currentTagIndex.isValid() and currentTagIndex not in (self.model().index(0, 0), self.model().index(0, 1)):
                 self.currentTagIndex = currentTagIndex
                 self.dropTimer.start()
+        elif 'text/uri-list' in formats:
+            event.accept()
 
     def dragMoveEvent(self, event):
         currentTagIndex = self.indexAt(event.pos())
-        if not currentTagIndex.isValid() or currentTagIndex == self.model().index(0, 0):
+        if self.currentTagIndex:
+            self.update(self.currentTagIndex)
+        if not currentTagIndex.isValid() or currentTagIndex in (self.model().index(0, 0), self.model().index(0, 1)):
             self.currentTagIndex = None
             self.dropTimer.stop()
-            event.ignore()
-            return
+            if 'text/uri-list' in event.mimeData().formats():
+                event.accept()
+            else:
+                event.ignore()
         else:
             event.accept()
             if currentTagIndex != self.currentTagIndex:
                 self.currentTagIndex = currentTagIndex
                 self.dropTimer.start()
+            #to enable item highlight at least for dbmodel drag we need this,
+            #otherwise it will not show the right cursor icon when dragging from external sources
+            if 'application/x-qabstractitemmodeldatalist' in event.mimeData().formats():
+                QtGui.QTreeView.dragMoveEvent(self, event)
 
     def dragLeaveEvent(self, event):
         self.currentTagIndex = None
@@ -714,71 +802,106 @@ class DbTreeView(QtGui.QTreeView):
     def dropEvent(self, event):
         self.dropTimer.stop()
         currentTagIndex = self.indexAt(event.pos())
-        if not currentTagIndex.isValid() or currentTagIndex == self.model().index(0, 0):
+        formats = event.mimeData().formats()
+        if not 'text/uri-list' in formats and (
+            'application/x-qabstractitemmodeldatalist' in formats and (
+                not currentTagIndex.isValid() or currentTagIndex in (self.model().index(0, 0), self.model().index(0, 1)))):
             event.ignore()
             return
         event.accept()
 
-        itemsDict = {}
-        data = event.mimeData().data('application/x-qabstractitemmodeldatalist')
-        stream = QtCore.QDataStream(data)
-        while not stream.atEnd():
-            row = stream.readInt32()
-            if not row in itemsDict:
-                itemsDict[row] = {}
-            #column is ignored
-            stream.readInt32()
-            items = stream.readInt32()
-            for i in range(items):
-                key = stream.readInt32()
-                value = stream.readQVariant()
-                itemsDict[row][key] = value
-        sampleList = [row[FilePathRole] for row in itemsDict.values()]
-        currentTag = currentTagIndex.data()
-        parentIndex = currentTagIndex.parent()
-        while parentIndex != self.model().index(0, 0):
-            currentTag = '{}/{}'.format(parentIndex.data(), currentTag)
-            parentIndex = parentIndex.parent()
-        self.samplesAddedToTag.emit(sampleList, currentTag)
+        if 'application/x-qabstractitemmodeldatalist' in formats:
+            itemsDict = {}
+            data = event.mimeData().data('application/x-qabstractitemmodeldatalist')
+            stream = QtCore.QDataStream(data)
+            while not stream.atEnd():
+                row = stream.readInt32()
+                if not row in itemsDict:
+                    itemsDict[row] = {}
+                #column is ignored
+                stream.readInt32()
+                items = stream.readInt32()
+                for i in range(items):
+                    key = stream.readInt32()
+                    value = stream.readQVariant()
+                    itemsDict[row][key] = value
+            sampleList = [row[FilePathRole] for row in itemsDict.values()]
+            #TODO: use indexFromPath?
+            currentTag = currentTagIndex.data()
+            parentIndex = currentTagIndex.parent()
+            while parentIndex != self.model().index(0, 0):
+                currentTag = '{}/{}'.format(parentIndex.data(), currentTag)
+                parentIndex = parentIndex.parent()
+            self.samplesAddedToTag.emit(sampleList, currentTag)
+        elif 'text/uri-list' in formats:
+            tag = self.model().sourceModel().pathFromIndex(self.model().mapToSource(currentTagIndex))
+            urlList = str(event.mimeData().data('text/uri-list'), encoding='ascii').split()
+            fileList = []
+            dirList = []
+            for encodedUrl in urlList:
+                fileInfo = QtCore.QFileInfo(QtCore.QUrl(encodedUrl).toLocalFile())
+                if fileInfo.isDir():
+                    dirList.append(fileInfo.absoluteFilePath())
+                else:
+                    fileList.append(fileInfo.absoluteFilePath())
+            if dirList:
+                scanDialog = SampleScanDialog(self)
+                if not scanDialog.exec_():
+                    return
+                scanMode = scanDialog.scanModeCombo.currentIndex()
+                formats = scanDialog.getFormats()
+                sampleRates = scanDialog.getSampleRates()
+                channels = scanDialog.channelsCombo.currentIndex()
+            else:
+                scanMode = 0
+                formats = True
+                sampleRates = True
+                channels = 0
+            res = ImportDialogScanDnD(self.main, dirList, fileList, scanMode, formats, sampleRates, channels, tag).exec_()
+            if not res:
+                return
+            self.samplesImported.emit([(filePath, fileName, info, tags) for (filePath, fileName, info, tags) in res], currentTagIndex)
 
 
 class DbDirModel(QtGui.QStandardItemModel):
     def __init__(self, db, *args, **kwargs):
         QtGui.QStandardItemModel.__init__(self, *args, **kwargs)
         self.db = db
+        self.updateTree()
 #        self.rootItem = QtGui.QStandardItem('/')
 #        self.appendRow(self.rootItem)
+
+    def updateTree(self):
         self.db.execute('SELECT filePath FROM samples')
         for data in self.db.fetchall():
             filePath = data[0]
             fileInfo = QtCore.QFileInfo(filePath)
-            self.updateTree(fileInfo.absoluteDir())
+            qdir = fileInfo.absoluteDir()
+            dirTree = tuple(filter(None, qdir.absolutePath().split(qdir.separator())))
+            depth = 0
+            parentIndex = QtCore.QModelIndex()
+            while depth < len(dirTree):
+                subdir = '{}/'.format(dirTree[depth])
+                if depth == 0:
+                    subdir = '/{}'.format(subdir)
+                dirMatch = self.match(self.index(0, 0, parentIndex), QtCore.Qt.DisplayRole, subdir, flags=QtCore.Qt.MatchExactly)
+                if not dirMatch:
+                    childItem = QtGui.QStandardItem(subdir)
+                    childItem.setData('/{}'.format('/'.join(dirTree[:depth + 1])), FilePathRole)
+                    countItem = QtGui.QStandardItem('1')
+                    try:
+                        self.itemFromIndex(parentIndex).appendRow([childItem, countItem])
+                    except:
+                        self.appendRow([childItem, countItem])
+                    parentIndex = childItem.index()
+                    depth += 1
+                    continue
+                parentIndex = dirMatch[0]
+                countIndex = parentIndex.sibling(parentIndex.row(), 1)
+                self.setData(countIndex, '{}'.format(int(countIndex.data()) + 1))
+                depth += 1
         self.optimizeTree()
 
-    def updateTree(self, qdir):
-        dirTree = tuple(filter(None, qdir.absolutePath().split(qdir.separator())))
-        depth = 0
-        parentIndex = QtCore.QModelIndex()
-        while depth < len(dirTree):
-            subdir = '{}/'.format(dirTree[depth])
-            if depth == 0:
-                subdir = '/{}'.format(subdir)
-            dirMatch = self.match(self.index(0, 0, parentIndex), QtCore.Qt.DisplayRole, subdir, flags=QtCore.Qt.MatchExactly)
-            if not dirMatch:
-                childItem = QtGui.QStandardItem(subdir)
-                childItem.setData('/{}'.format('/'.join(dirTree[:depth + 1])), FilePathRole)
-                countItem = QtGui.QStandardItem('1')
-                try:
-                    self.itemFromIndex(parentIndex).appendRow([childItem, countItem])
-                except:
-                    self.appendRow([childItem, countItem])
-                parentIndex = childItem.index()
-                depth += 1
-                continue
-            parentIndex = dirMatch[0]
-            countIndex = parentIndex.sibling(parentIndex.row(), 1)
-            self.setData(countIndex, '{}'.format(int(countIndex.data()) + 1))
-            depth += 1
 
     def optimizeTree(self):
         for row in range(self.rowCount()):
@@ -807,6 +930,16 @@ class TagsModel(QtGui.QStandardItemModel):
         self.appendRow([QtGui.QStandardItem('All samples'), self.totalCountItem])
         self.tags = set()
         self.dataChanged.connect(self.updateTags)
+
+    def pathFromIndex(self, index):
+        if not index.isValid():
+            return ''
+        currentTag = index.data()
+        parentIndex = index.parent()
+        while parentIndex != self.index(0, 0):
+            currentTag = '{}/{}'.format(parentIndex.data(), currentTag)
+            parentIndex = parentIndex.parent()
+        return currentTag
 
     def indexFromPath(self, path):
         tagTree = path.split('/')
@@ -1550,8 +1683,9 @@ class SampleBrowse(QtGui.QMainWindow):
 
         self.dbSplitter = QtGui.QSplitter(QtCore.Qt.Vertical)
         self.browserStackedLayout.addWidget(self.dbSplitter)
-        self.dbTreeView = DbTreeView()
+        self.dbTreeView = DbTreeView(self)
         self.dbTreeView.samplesAddedToTag.connect(self.addSamplesToTag)
+        self.dbTreeView.samplesImported.connect(self.importSamplesWithTags)
         self.tagTreeDelegate = TagTreeDelegate()
         self.tagTreeDelegate.tagColorsChanged.connect(self.saveTagColors)
         self.tagTreeDelegate.startEditTag.connect(self.renameTag)
@@ -2183,6 +2317,7 @@ class SampleBrowse(QtGui.QMainWindow):
 
         currentTag = index.data()
         current = index
+        #TODO: use indexFromPath?
         while True:
             parent = current.parent()
             if not parent.isValid() or parent == self.dbTreeProxyModel.index(0, 0):
@@ -2237,6 +2372,15 @@ class SampleBrowse(QtGui.QMainWindow):
         self.sampleView.viewport().update()
         self.dbConn.commit()
         self.reloadTags()
+
+    def importSamplesWithTags(self, sampleList, tagIndex):
+        for filePath, fileName, info, tags in sampleList:
+            self._addSampleToDb(filePath, fileName, info, ','.join(tags))
+        self.dbConn.commit()
+        self.reloadTags()
+        if tagIndex.isValid():
+            self.dbTreeViewDoubleClicked(tagIndex)
+
 
     def toggleBrowser(self, index):
         self.browserStackedLayout.setCurrentIndex(index)
