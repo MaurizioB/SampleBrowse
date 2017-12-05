@@ -742,6 +742,62 @@ class DbTreeView(QtGui.QTreeView):
         self.samplesAddedToTag.emit(sampleList, currentTag)
 
 
+class DbDirModel(QtGui.QStandardItemModel):
+    def __init__(self, db, *args, **kwargs):
+        QtGui.QStandardItemModel.__init__(self, *args, **kwargs)
+        self.db = db
+#        self.rootItem = QtGui.QStandardItem('/')
+#        self.appendRow(self.rootItem)
+        self.db.execute('SELECT filePath FROM samples')
+        for data in self.db.fetchall():
+            filePath = data[0]
+            fileInfo = QtCore.QFileInfo(filePath)
+            self.updateTree(fileInfo.absoluteDir())
+        self.optimizeTree()
+
+    def updateTree(self, qdir):
+        dirTree = tuple(filter(None, qdir.absolutePath().split(qdir.separator())))
+        depth = 0
+        parentIndex = QtCore.QModelIndex()
+        while depth < len(dirTree):
+            subdir = '{}/'.format(dirTree[depth])
+            if depth == 0:
+                subdir = '/{}'.format(subdir)
+            dirMatch = self.match(self.index(0, 0, parentIndex), QtCore.Qt.DisplayRole, subdir, flags=QtCore.Qt.MatchExactly)
+            if not dirMatch:
+                childItem = QtGui.QStandardItem(subdir)
+                childItem.setData('/{}'.format('/'.join(dirTree[:depth + 1])), FilePathRole)
+                countItem = QtGui.QStandardItem('1')
+                try:
+                    self.itemFromIndex(parentIndex).appendRow([childItem, countItem])
+                except:
+                    self.appendRow([childItem, countItem])
+                parentIndex = childItem.index()
+                depth += 1
+                continue
+            parentIndex = dirMatch[0]
+            countIndex = parentIndex.sibling(parentIndex.row(), 1)
+            self.setData(countIndex, '{}'.format(int(countIndex.data()) + 1))
+            depth += 1
+
+    def optimizeTree(self):
+        for row in range(self.rowCount()):
+            self.optimizeItemTree(self.item(row))
+
+    def optimizeItemTree(self, parent):
+        if not parent.rowCount():
+            return True
+        if parent.rowCount() > 1:
+            for row in range(parent.rowCount()):
+                self.optimizeItemTree(parent.child(row))
+            return False
+        child = parent.child(0)
+        if self.optimizeItemTree(child):
+            parent.takeRow(0)
+            parent.setText('{}{}'.format(parent.text(), child.text()))
+            parent.setData(child.data(FilePathRole), FilePathRole)
+            return True
+
 class TagsModel(QtGui.QStandardItemModel):
     tagRenamed = QtCore.pyqtSignal(str, str)
     def __init__(self, db, *args, **kwargs):
@@ -1256,9 +1312,9 @@ class DownArrowIcon(QtGui.QIcon):
         qp = QtGui.QPainter(pm)
         qp.setRenderHints(QtGui.QPainter.Antialiasing)
         path = QtGui.QPainterPath()
-        path.moveTo(2, 2)
-        path.lineTo(6, 8)
-        path.lineTo(10, 2)
+        path.moveTo(2, 4)
+        path.lineTo(6, 10)
+        path.lineTo(10, 4)
         qp.drawPath(path)
         del qp
         QtGui.QIcon.__init__(self, pm)
@@ -1439,10 +1495,11 @@ class SampleBrowse(QtGui.QMainWindow):
         self.fsSplitter = QtGui.QSplitter(QtCore.Qt.Vertical)
         self.browserStackedLayout.addWidget(self.fsSplitter)
         self.fsView = QtGui.QTreeView()
+        self.fsSplitter.addWidget(self.fsView)
         self.fsView.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.fsView.setHeaderHidden(True)
-        self.fsSplitter.addWidget(self.fsView)
         self.favouriteWidget = QtGui.QWidget()
+        self.favouriteWidget.setSizePolicy(QtGui.QSizePolicy(QtGui.QSizePolicy.Preferred, QtGui.QSizePolicy.Maximum))
         self.fsSplitter.addWidget(self.favouriteWidget)
         favouriteLayout = QtGui.QGridLayout()
         self.favouriteWidget.setLayout(favouriteLayout)
@@ -1457,6 +1514,7 @@ class SampleBrowse(QtGui.QMainWindow):
         self.favouritesTable.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.favouritesTable.setSelectionBehavior(self.favouritesTable.SelectRows)
         self.favouritesTable.setSortingEnabled(True)
+        self.favouritesTable.horizontalHeader().setMaximumHeight(self.favouritesTable.fontMetrics().height() + 4)
         self.favouritesTable.horizontalHeader().setHighlightSections(False)
         self.favouritesTable.verticalHeader().setVisible(False)
         favouriteLayout.addWidget(self.favouritesTable)
@@ -1485,11 +1543,13 @@ class SampleBrowse(QtGui.QMainWindow):
         self.favouritesModel.dataChanged.connect(self.favouritesDataChanged)
         self.favouritesToggleBtn.clicked.connect(self.favouritesToggle)
 
+        self.fsSplitter.setStretchFactor(0, 50)
+        self.fsSplitter.setStretchFactor(1, 1)
+
         self.loadDb()
 
-        self.dbWidget = QtGui.QWidget()
-        dbLayout = QtGui.QGridLayout()
-        self.dbWidget.setLayout(dbLayout)
+        self.dbSplitter = QtGui.QSplitter(QtCore.Qt.Vertical)
+        self.browserStackedLayout.addWidget(self.dbSplitter)
         self.dbTreeView = DbTreeView()
         self.dbTreeView.samplesAddedToTag.connect(self.addSamplesToTag)
         self.tagTreeDelegate = TagTreeDelegate()
@@ -1505,8 +1565,35 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbTreeProxyModel.setSourceModel(self.dbTreeModel)
         self.dbTreeView.setModel(self.dbTreeProxyModel)
         self.dbTreeView.doubleClicked.connect(self.dbTreeViewDoubleClicked)
-        dbLayout.addWidget(self.dbTreeView)
-        self.browserStackedLayout.addWidget(self.dbWidget)
+        self.dbSplitter.addWidget(self.dbTreeView)
+
+        self.dbDirWidget = QtGui.QWidget()
+        self.dbDirWidget.setSizePolicy(QtGui.QSizePolicy(QtGui.QSizePolicy.Preferred, QtGui.QSizePolicy.Maximum))
+        self.dbSplitter.addWidget(self.dbDirWidget)
+        dirLayout = QtGui.QGridLayout()
+        dbHeaderLayout = QtGui.QHBoxLayout()
+        dbHeaderLayout.addWidget(QtGui.QLabel('Directories'))
+        dbHeaderLayout.addStretch()
+        self.dbDirToggleBtn = VerticalDownToggleBtn()
+        dbHeaderLayout.addWidget(self.dbDirToggleBtn)
+        self.dbDirToggleBtn.clicked.connect(self.dbDirToggle)
+        dbHeaderLayout.addSpacing(5)
+        dirLayout.addLayout(dbHeaderLayout, 0, 0)
+        self.dbDirWidget.setLayout(dirLayout)
+        self.dbDirView = QtGui.QTreeView()
+        self.dbDirView.setEditTriggers(self.dbDirView.NoEditTriggers)
+        self.dbDirView.doubleClicked.connect(self.dbDirViewSelect)
+        dirLayout.addWidget(self.dbDirView)
+        self.dbDirModel = DbDirModel(self.sampleDb)
+        self.dbDirView.setModel(self.dbDirModel)
+        self.dbDirView.setHeaderHidden(True)
+        self.dbDirView.header().setStretchLastSection(False)
+        self.dbDirView.resizeColumnToContents(1), 
+        self.dbDirView.header().setResizeMode(0, QtGui.QHeaderView.Stretch), 
+
+        self.dbSplitter.setStretchFactor(0, 50)
+        self.dbSplitter.setStretchFactor(1, 1)
+
 
         self.browseSelectGroup.buttonClicked[int].connect(self.toggleBrowser)
         self.browseModel = QtGui.QStandardItemModel()
@@ -1569,8 +1656,6 @@ class SampleBrowse(QtGui.QMainWindow):
             self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
         self.mainSplitter.setStretchFactor(0, 8)
         self.mainSplitter.setStretchFactor(1, 16)
-        self.fsSplitter.setStretchFactor(0, 50)
-        self.fsSplitter.setStretchFactor(1, 1)
 
         self.infoTabWidget.setTabEnabled(1, False)
         self.shown = False
@@ -1659,7 +1744,7 @@ class SampleBrowse(QtGui.QMainWindow):
         dirPath = self.fsModel.filePath(self.fsProxyModel.mapToSource(dirIndex))
 
         menu = QtGui.QMenu()
-        addDirAction = QtGui.QAction('Add "{}" to favourites'.format(dirName), menu)
+        addDirAction = QtGui.QAction(QtGui.QIcon.fromTheme('emblem-favorite'), 'Add "{}" to favourites'.format(dirName), menu)
         for row in range(self.favouritesModel.rowCount()):
             dirPathItem = self.favouritesModel.item(row, 1)
             if dirPathItem.text() == dirPath:
@@ -1667,7 +1752,7 @@ class SampleBrowse(QtGui.QMainWindow):
                 break
         sep = QtGui.QAction(menu)
         sep.setSeparator(True)
-        scanAction = QtGui.QAction('Scan "{}" for samples'.format(dirName), menu)
+        scanAction = QtGui.QAction(QtGui.QIcon.fromTheme('edit-find'), 'Scan "{}" for samples'.format(dirName), menu)
 
         menu.addActions([addDirAction, sep, scanAction])
         res = menu.exec_(self.fsView.mapToGlobal(pos))
@@ -1742,9 +1827,11 @@ class SampleBrowse(QtGui.QMainWindow):
         dirPathIndex = index.sibling(index.row(), 1)
         dirPath = dirPathIndex.data()
         menu = QtGui.QMenu()
-        scrollToAction = QtGui.QAction('Show directory in tree', menu)
-        removeAction = QtGui.QAction('Remove from favourites', menu)
-        menu.addActions([scrollToAction, removeAction])
+        scrollToAction = QtGui.QAction(QtGui.QIcon.fromTheme('folder'), 'Show directory in tree', menu)
+        sep = QtGui.QAction(menu)
+        sep.setSeparator(True)
+        removeAction = QtGui.QAction(QtGui.QIcon.fromTheme('edit-delete'), 'Remove from favourites', menu)
+        menu.addActions([scrollToAction, sep, removeAction])
         res = menu.exec_(self.favouritesTable.viewport().mapToGlobal(event.pos()))
         if res == scrollToAction:
             self.fsView.setCurrentIndex(self.fsProxyModel.mapFromSource(self.fsModel.index(dirPath)))
@@ -1764,6 +1851,11 @@ class SampleBrowse(QtGui.QMainWindow):
         visible = self.favouritesTable.isVisible()
         self.favouritesTable.setVisible(not visible)
         self.favouritesToggleBtn.toggle(not visible)
+
+    def dbDirToggle(self):
+        visible = self.dbDirView.isVisible()
+        self.dbDirView.setVisible(not visible)
+        self.dbDirToggleBtn.toggle(not visible)
 
     def dirChanged(self, index):
         self.browse(self.fsModel.filePath(self.fsProxyModel.mapToSource(index)))
@@ -1952,15 +2044,17 @@ class SampleBrowse(QtGui.QMainWindow):
                 if self.currentShownSampleIndex and self.currentShownSampleIndex.model() == self.dbModel:
                     self.sampleView.setCurrentIndex(self.currentShownSampleIndex)
                 return
+            elif not self.currentDbQuery:
+                query = 'SELECT * FROM samples', tuple()
             else:
-                query = 'SELECT * FROM samples'
+                query = self.currentDbQuery
         self.currentDbQuery = query
         self.sampleDbUpdated = False
         self.dbModel.clear()
         self.dbModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Bits', 'Tags', 'Preview'])
         for column, visible in dbColumns.items():
             self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
-        for row in self.sampleDb.execute(query):
+        for row in self.sampleDb.execute(*query):
             filePath, fileName, length, format, sampleRate, channels, subtype, tags, data = row
             fileItem = QtGui.QStandardItem(fileName)
             fileItem.setData(filePath, FilePathRole)
@@ -2076,6 +2170,7 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbTreeView.header().setResizeMode(0, QtGui.QHeaderView.Stretch)
         self.dbTreeView.header().setResizeMode(1, QtGui.QHeaderView.Fixed)
 
+    
     def dbTreeViewDoubleClicked(self, index):
         if self.dbTreeProxyModel.mapToSource(index) == self.dbTreeModel.index(0, 0):
             self.browseDb()
@@ -2124,6 +2219,9 @@ class SampleBrowse(QtGui.QMainWindow):
         for c in range(2, subtypeColumn + 1):
             self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
+
+    def dbDirViewSelect(self, index):
+        self.browseDb(('SELECT * from samples WHERE filePath LIKE ?', ('{}%'.format(index.data(FilePathRole)), )))
 
     def addSamplesToTag(self, sampleList, newTag):
         for filePath in sampleList:
