@@ -739,8 +739,21 @@ class DropTimer(QtCore.QTimer):
         self.currentIndex = index
         QtCore.QTimer.start(self)
 
+class TreeViewWithLines(QtGui.QTreeView):
+    def drawRow(self, painter, option, index):
+        QtGui.QTreeView.drawRow(self, painter, option, index)
+        painter.setPen(QtCore.Qt.lightGray)
+        y = option.rect.y()
+        painter.save()
+        for sectionId in range(self.header().count()):
+#            x = self.header().sectionSize(sectionId)
+            painter.drawLine(0, y, 0, y + option.rect.height())
+            painter.translate(self.header().sectionSize(sectionId), 0)
+        painter.restore()
+#        painter.drawLine(0, y + option.rect.height(), option.rect.width(), y + option.rect.height())
 
-class DbTreeView(QtGui.QTreeView):
+
+class DbTreeView(TreeViewWithLines):
     samplesAddedToTag = QtCore.pyqtSignal(object, str)
     samplesImported = QtCore.pyqtSignal(object, object)
     def __init__(self, main, *args, **kwargs):
@@ -1714,7 +1727,7 @@ class SampleBrowse(QtGui.QMainWindow):
         dbHeaderLayout.addSpacing(5)
         dirLayout.addLayout(dbHeaderLayout, 0, 0)
         self.dbDirWidget.setLayout(dirLayout)
-        self.dbDirView = QtGui.QTreeView()
+        self.dbDirView = TreeViewWithLines()
         self.dbDirView.setEditTriggers(self.dbDirView.NoEditTriggers)
         self.dbDirView.doubleClicked.connect(self.dbDirViewSelect)
         dirLayout.addWidget(self.dbDirView)
@@ -1722,8 +1735,9 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbDirView.setModel(self.dbDirModel)
         self.dbDirView.setHeaderHidden(True)
         self.dbDirView.header().setStretchLastSection(False)
-        self.dbDirView.resizeColumnToContents(1), 
-        self.dbDirView.header().setResizeMode(0, QtGui.QHeaderView.Stretch), 
+        self.dbDirView.resizeColumnToContents(1)
+        self.dbDirView.header().setResizeMode(0, QtGui.QHeaderView.Stretch)
+        self.dbDirView.header().setResizeMode(1, QtGui.QHeaderView.ResizeToContents)
 
         self.dbSplitter.setStretchFactor(0, 50)
         self.dbSplitter.setStretchFactor(1, 1)
@@ -2128,10 +2142,17 @@ class SampleBrowse(QtGui.QMainWindow):
         elif res == removeAllAction:
             if RemoveSamplesDialog(self, exist).exec_():
                 fileNames = [i.data(FilePathRole) for i in exist]
-                self.sampleDb.execute(
-                    'DELETE FROM samples WHERE filePath IN ({})'.format(','.join(['?' for i in fileNames])), 
-                    fileNames
-                    )
+                if len(fileNames) < 999:
+                    self.sampleDb.execute(
+                        'DELETE FROM samples WHERE filePath IN ({})'.format(','.join(['?' for i in fileNames])), 
+                        fileNames
+                        )
+                else:
+                    for items in [fileNames[i:i+999] for i in range(0, len(fileNames), 999)]:
+                        self.sampleDb.execute(
+                            'DELETE FROM samples WHERE filePath IN ({})'.format(','.join(['?' for i in items])), 
+                            items
+                            )
                 self.dbConn.commit()
                 if self.sampleView.model() == self.dbProxyModel:
                     for index in sorted(exist, key=lambda index: index.row(), reverse=True):
@@ -2139,6 +2160,7 @@ class SampleBrowse(QtGui.QMainWindow):
                 else:
                     self.sampleDbUpdated = True
                 self.reloadTags()
+                self.dbDirModel.updateTree()
 
     def addSampleGroupToDb(self, fileIndexes, tags=''):
         for fileIndex in fileIndexes:
@@ -2380,6 +2402,7 @@ class SampleBrowse(QtGui.QMainWindow):
         self.reloadTags()
         if tagIndex.isValid():
             self.dbTreeViewDoubleClicked(tagIndex)
+        self.dbDirModel.updateTree()
 
 
     def toggleBrowser(self, index):
@@ -2476,13 +2499,14 @@ class SampleBrowse(QtGui.QMainWindow):
         self.sampleDb.execute('SELECT * FROM samples WHERE filePath=?', (filePath, ))
         if not self.sampleDb.fetchone():
             return
-        self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (tagList, filePath))
+        self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (','.join(tagList), filePath))
+        self.dbConn.commit()
         self.reloadTags()
         sampleMatch = self.dbModel.match(self.dbModel.index(0, 0), FilePathRole, filePath, flags=QtCore.Qt.MatchExactly)
         if sampleMatch:
             fileIndex = sampleMatch[0]
             tagsIndex = fileIndex.sibling(fileIndex.row(), tagsColumn)
-            self.dbModel.itemFromIndex(tagsIndex).setText(tagList)
+            self.dbModel.itemFromIndex(tagsIndex).setData(tagList, TagsRole)
 
     def setCurrentWave(self, index=None):
         self.infoTab.setEnabled(True)
