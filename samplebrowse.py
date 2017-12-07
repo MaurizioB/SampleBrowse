@@ -10,6 +10,8 @@ from PyQt4 import QtCore, QtGui, QtMultimedia, uic
 import soundfile
 import numpy as np
 
+from widgets import AdvancedSplitter
+
 availableFormats = tuple(f.lower() for f in soundfile.available_formats().keys())
 availableExtensions = tuple('*.' + f for f in availableFormats)
 
@@ -1638,34 +1640,20 @@ class SampleBrowse(QtGui.QMainWindow):
         self.browserStackedWidget.setLayout(self.browserStackedLayout)
         self.mainSplitter.insertWidget(0, self.browserStackedWidget)
 
-        self.fsSplitter = QtGui.QSplitter(QtCore.Qt.Vertical)
+        self.fsSplitter = AdvancedSplitter(QtCore.Qt.Vertical)
         self.browserStackedLayout.addWidget(self.fsSplitter)
         self.fsView = QtGui.QTreeView()
-        self.fsSplitter.addWidget(self.fsView)
+        self.fsSplitter.addWidget(self.fsView, collapsible=False)
         self.fsView.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.fsView.setHeaderHidden(True)
-        self.favouriteWidget = QtGui.QWidget()
-        self.favouriteWidget.setSizePolicy(QtGui.QSizePolicy(QtGui.QSizePolicy.Preferred, QtGui.QSizePolicy.Maximum))
-        self.fsSplitter.addWidget(self.favouriteWidget)
-        favouriteLayout = QtGui.QGridLayout()
-        self.favouriteWidget.setLayout(favouriteLayout)
-        favouriteHeaderLayout = QtGui.QHBoxLayout()
-        favouriteLayout.addLayout(favouriteHeaderLayout, 0, 0)
-        favouritesLbl = QtGui.QLabel('Favourites')
-        favouritesLbl.setSizePolicy(QtGui.QSizePolicy(QtGui.QSizePolicy.Expanding, QtGui.QSizePolicy.Preferred))
-        favouritesLbl.mousePressEvent = lambda ev: self.favouritesToggle()
-        favouriteHeaderLayout.addWidget(favouritesLbl)
-        self.favouritesToggleBtn = VerticalDownToggleBtn()
-        favouriteHeaderLayout.addWidget(self.favouritesToggleBtn)
-        favouriteHeaderLayout.addSpacing(5)
         self.favouritesTable = QtGui.QTableView()
+        self.fsSplitter.addWidget(self.favouritesTable, label='Favourites')
         self.favouritesTable.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.favouritesTable.setSelectionBehavior(self.favouritesTable.SelectRows)
         self.favouritesTable.setSortingEnabled(True)
         self.favouritesTable.horizontalHeader().setMaximumHeight(self.favouritesTable.fontMetrics().height() + 4)
         self.favouritesTable.horizontalHeader().setHighlightSections(False)
         self.favouritesTable.verticalHeader().setVisible(False)
-        favouriteLayout.addWidget(self.favouritesTable)
         
         self.fsModel = QtGui.QFileSystemModel()
         self.fsModel.setFilter(QtCore.QDir.AllDirs|QtCore.QDir.NoDotAndDotDot)
@@ -1689,14 +1677,13 @@ class SampleBrowse(QtGui.QMainWindow):
         self.favouritesTable.horizontalHeader().setStretchLastSection(True)
         self.loadFavourites()
         self.favouritesModel.dataChanged.connect(self.favouritesDataChanged)
-        self.favouritesToggleBtn.clicked.connect(self.favouritesToggle)
 
         self.fsSplitter.setStretchFactor(0, 50)
         self.fsSplitter.setStretchFactor(1, 1)
 
         self.loadDb()
 
-        self.dbSplitter = QtGui.QSplitter(QtCore.Qt.Vertical)
+        self.dbSplitter = AdvancedSplitter(QtCore.Qt.Vertical)
         self.browserStackedLayout.addWidget(self.dbSplitter)
         self.dbTreeView = DbTreeView(self)
         self.dbTreeView.samplesAddedToTag.connect(self.addSamplesToTag)
@@ -1714,26 +1701,12 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbTreeProxyModel.setSourceModel(self.dbTreeModel)
         self.dbTreeView.setModel(self.dbTreeProxyModel)
         self.dbTreeView.doubleClicked.connect(self.dbTreeViewDoubleClicked)
-        self.dbSplitter.addWidget(self.dbTreeView)
+        self.dbSplitter.addWidget(self.dbTreeView, collapsible=False)
 
-        self.dbDirWidget = QtGui.QWidget()
-        self.dbDirWidget.setSizePolicy(QtGui.QSizePolicy(QtGui.QSizePolicy.Preferred, QtGui.QSizePolicy.Maximum))
-        self.dbSplitter.addWidget(self.dbDirWidget)
-        dirLayout = QtGui.QGridLayout()
-        dbHeaderLayout = QtGui.QHBoxLayout()
-        dirToggleLbl = QtGui.QLabel('Directories')
-        dbHeaderLayout.addWidget(dirToggleLbl)
-        dirToggleLbl.mousePressEvent = lambda ev: self.dbDirToggle()
-        self.dbDirToggleBtn = VerticalDownToggleBtn()
-        dbHeaderLayout.addWidget(self.dbDirToggleBtn)
-        self.dbDirToggleBtn.clicked.connect(self.dbDirToggle)
-        dbHeaderLayout.addSpacing(5)
-        dirLayout.addLayout(dbHeaderLayout, 0, 0)
-        self.dbDirWidget.setLayout(dirLayout)
         self.dbDirView = TreeViewWithLines()
         self.dbDirView.setEditTriggers(self.dbDirView.NoEditTriggers)
         self.dbDirView.doubleClicked.connect(self.dbDirViewSelect)
-        dirLayout.addWidget(self.dbDirView)
+        self.dbSplitter.addWidget(self.dbDirView, label='Directories')
         self.dbDirModel = DbDirModel(self.sampleDb)
         self.dbDirView.setModel(self.dbDirModel)
         self.dbDirView.setHeaderHidden(True)
@@ -1998,15 +1971,17 @@ class SampleBrowse(QtGui.QMainWindow):
             self.favouritesModel.takeRow(index.row())
             self.settings.endGroup()
 
-    def favouritesToggle(self):
-        visible = self.favouritesTable.isVisible()
-        self.favouritesTable.setVisible(not visible)
-        self.favouritesToggleBtn.toggle(not visible)
-
-    def dbDirToggle(self):
-        visible = self.dbDirView.isVisible()
-        self.dbDirView.setVisible(not visible)
-        self.dbDirToggleBtn.toggle(not visible)
+#    def favouritesToggle(self, *args):
+#        visible = not self.favouritesTable.isVisible()
+#        self.favouritesTable.setVisible(visible)
+#        self.favouritesToggleBtn.toggle(visible)
+#        self.favouriteWidget.setMaximumHeight(self.favouriteWidget.layout().sizeHint().height())
+#
+#    def dbDirToggle(self, *args):
+#        visible = not self.dbDirView.isVisible()
+#        self.dbDirView.setVisible(visible)
+#        self.dbDirToggleBtn.toggle(visible)
+#        self.dbDirWidget.setMaximumHeight(self.dbDirWidget.layout().sizeHint().height())
 
     def dirChanged(self, index):
         self.browse(self.fsModel.filePath(self.fsProxyModel.mapToSource(index)))
