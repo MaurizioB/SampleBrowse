@@ -53,6 +53,7 @@ class AudioSettingsDialog(QtWidgets.QDialog):
     def deviceSelected(self, index):
         self.sampleRatesModel.clear()
         device = index.data(DeviceRole)
+        self.buttonBox.button(self.buttonBox.Ok).setEnabled(True if index.data(ValidRole) != False else False)
         self.deviceInfoBox.setTitle(device.deviceName())
         preferredFormat = index.data(FormatRole)
         if not preferredFormat:
@@ -89,12 +90,12 @@ class AudioSettingsDialog(QtWidgets.QDialog):
             deviceItem.setData(sampleRates, SampleRateRole)
             deviceItem.setData(sampleSizes, SampleSizeRole)
             deviceItem.setData(channels, ChannelsRole)
+            if not (sampleRates and sampleSizes and channels):
+                deviceItem.setData(False, ValidRole)
             self.deviceModel.appendRow(deviceItem)
         currentDeviceName = self.settings.value('AudioDevice')
         if currentDeviceName:
-            print('current:', currentDeviceName)
             match = self.deviceModel.match(self.deviceModel.index(0, 0), QtCore.Qt.DisplayRole, currentDeviceName, flags=QtCore.Qt.MatchExactly)
-            print(match)
             if not match:
                 self.deviceList.setCurrentIndex(current.index())
             else:

@@ -47,7 +47,8 @@ dbColumns.update({
     })
 sampleViewColumns = browseColumns, dbColumns
 
-DeviceRole = QtCore.Qt.UserRole + 1
+ValidRole = QtCore.Qt.UserRole + 1
+DeviceRole = ValidRole + 1
 SampleRateRole = DeviceRole + 1
 SampleSizeRole = SampleRateRole + 1
 ChannelsRole = SampleSizeRole + 1
