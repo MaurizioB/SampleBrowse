@@ -39,6 +39,7 @@ class AudioDevicesListView(QtWidgets.QListView):
     def currentChanged(self, current, previous):
         self.deviceSelected.emit(current)
 
+
 class AudioSettingsDialog(QtWidgets.QDialog):
     def __init__(self, parent):
         QtWidgets.QDialog.__init__(self, parent)
@@ -123,6 +124,7 @@ class AudioSettingsDialog(QtWidgets.QDialog):
         prober.moveToThread(proberThread)
         proberThread.started.connect(prober.probe)
         prober.deviceList.connect(self.probed)
+        prober.deviceList.connect(lambda _: [proberThread.quit(), prober.deleteLater(), proberThread.deleteLater()])
         self.deviceModel.clear()
         self.show()
         self.popup.show()
