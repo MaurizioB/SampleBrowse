@@ -371,12 +371,12 @@
   <customwidget>
    <class>TagsEditorTextEdit</class>
    <extends>QTextEdit</extends>
-   <header>samplebrowse</header>
+   <header>src.widgets</header>
   </customwidget>
   <customwidget>
    <class>SampleView</class>
    <extends>QTableView</extends>
-   <header>samplebrowse</header>
+   <header>src</header>
   </customwidget>
  </customwidgets>
  <tabstops>
