@@ -1,6 +1,6 @@
 import os
 import soundfile
-from PyQt4 import QtCore, QtGui, uic
+from PyQt5 import QtCore, QtGui, QtWidgets, uic
 
 import src
 from src.constants import *
@@ -8,12 +8,12 @@ from src.widgets import TagsEditorTextEdit, AlignItemDelegate, TagListDelegate, 
 from src.classes import SampleSortFilterProxyModel, Crawler
 
 
-class TagColorDialog(QtGui.QDialog):
+class TagColorDialog(QtWidgets.QDialog):
     def __init__(self, parent, index):
-        QtGui.QDialog.__init__(self, parent)
-        layout = QtGui.QGridLayout()
+        QtWidgets.QDialog.__init__(self, parent)
+        layout = QtWidgets.QGridLayout()
         self.setLayout(layout)
-        layout.addWidget(QtGui.QLabel('Text color:'))
+        layout.addWidget(QtWidgets.QLabel('Text color:'))
         self.foregroundColor = index.data(QtCore.Qt.ForegroundRole)
         self.backgroundColor = index.data(QtCore.Qt.BackgroundRole)
         self.foregroundEdit = ColorLineEdit()
@@ -35,22 +35,22 @@ class TagColorDialog(QtGui.QDialog):
         self.foregroundEdit.editBtnClicked.connect(self.foregroundSelect)
         self.foregroundEdit.setPalette(basePalette)
         layout.addWidget(self.foregroundEdit, 0, 1)
-        autoBgBtn = QtGui.QPushButton('Autoset background')
+        autoBgBtn = QtWidgets.QPushButton('Autoset background')
         layout.addWidget(autoBgBtn, 0, 2)
         autoBgBtn.clicked.connect(lambda: self.setBackgroundColor(self.reverseColor(self.foregroundColor)))
 
-        layout.addWidget(QtGui.QLabel('Background:'))
+        layout.addWidget(QtWidgets.QLabel('Background:'))
         self.backgroundEdit = ColorLineEdit()
         self.backgroundEdit.setText(self.backgroundColor.name())
         self.backgroundEdit.textChanged.connect(self.setBackgroundColor)
         self.backgroundEdit.editBtnClicked.connect(self.backgroundSelect)
         self.backgroundEdit.setPalette(basePalette)
         layout.addWidget(self.backgroundEdit, 1, 1)
-        autoFgBtn = QtGui.QPushButton('Autoset text')
+        autoFgBtn = QtWidgets.QPushButton('Autoset text')
         layout.addWidget(autoFgBtn, 1, 2)
         autoFgBtn.clicked.connect(lambda: self.setForegroundColor(self.reverseColor(self.backgroundColor)))
 
-        self.buttonBox = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok|QtGui.QDialogButtonBox.Cancel|QtGui.QDialogButtonBox.RestoreDefaults)
+        self.buttonBox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok|QtWidgets.QDialogButtonBox.Cancel|QtWidgets.QDialogButtonBox.RestoreDefaults)
         layout.addWidget(self.buttonBox, layout.rowCount(), 0, 1, layout.columnCount())
         self.okBtn = self.buttonBox.button(self.buttonBox.Ok)
         self.okBtn.clicked.connect(self.accept)
@@ -64,7 +64,7 @@ class TagColorDialog(QtGui.QDialog):
         return QtGui.QColor(r^255, g^255, b^255)
 
     def foregroundSelect(self):
-        color = QtGui.QColorDialog.getColor(self.foregroundColor, self, 'Select text color')
+        color = QtWidgets.QColorDialog.getColor(self.foregroundColor, self, 'Select text color')
         if color.isValid():
             self.foregroundEdit.setText(color.name())
             self.setForegroundColor(color)
@@ -82,7 +82,7 @@ class TagColorDialog(QtGui.QDialog):
         self.backgroundEdit.setPalette(palette)
 
     def backgroundSelect(self):
-        color = QtGui.QColorDialog.getColor(self.backgroundColor, self, 'Select background color')
+        color = QtWidgets.QColorDialog.getColor(self.backgroundColor, self, 'Select background color')
         if color.isValid():
             self.backgroundEdit.setText(color.name())
             self.setBackgroundColor(color)
@@ -100,16 +100,16 @@ class TagColorDialog(QtGui.QDialog):
         self.backgroundEdit.setPalette(palette)
 
     def exec_(self):
-        res = QtGui.QDialog.exec_(self)
+        res = QtWidgets.QDialog.exec_(self)
         if self.foregroundColor == self.defaultForeground and self.backgroundColor == self.defaultBackground:
             self.foregroundColor = None
             self.backgroundColor = None
         return res
 
 
-class ImportDialog(QtGui.QDialog):
+class ImportDialog(QtWidgets.QDialog):
     def __init__(self, parent):
-        QtGui.QDialog.__init__(self, parent)
+        QtWidgets.QDialog.__init__(self, parent)
         uic.loadUi('{}/importdialog.ui'.format(os.path.dirname(src.__file__)), self)
         self.sampleModel = QtGui.QStandardItemModel()
         self.sampleProxyModel = SampleSortFilterProxyModel()
@@ -130,18 +130,18 @@ class ImportDialog(QtGui.QDialog):
 
         fontMetrics = QtGui.QFontMetrics(self.font())
 
-        self.sampleView.horizontalHeader().setResizeMode(fileNameColumn, QtGui.QHeaderView.Stretch)
-        self.sampleView.horizontalHeader().setResizeMode(dirColumn, QtGui.QHeaderView.Stretch)
+        self.sampleView.horizontalHeader().setSectionResizeMode(fileNameColumn, QtWidgets.QHeaderView.Stretch)
+        self.sampleView.horizontalHeader().setSectionResizeMode(dirColumn, QtWidgets.QHeaderView.Stretch)
         self.sampleView.horizontalHeader().resizeSection(lengthColumn, fontMetrics.width('888.888') + 10)
-        self.sampleView.horizontalHeader().setResizeMode(lengthColumn, QtGui.QHeaderView.Fixed)
+        self.sampleView.horizontalHeader().setSectionResizeMode(lengthColumn, QtWidgets.QHeaderView.Fixed)
         self.sampleView.horizontalHeader().resizeSection(formatColumn, fontMetrics.width('Format') + 10)
-        self.sampleView.horizontalHeader().setResizeMode(formatColumn, QtGui.QHeaderView.Fixed)
+        self.sampleView.horizontalHeader().setSectionResizeMode(formatColumn, QtWidgets.QHeaderView.Fixed)
         self.sampleView.horizontalHeader().resizeSection(rateColumn, fontMetrics.width('192000') + 10)
-        self.sampleView.horizontalHeader().setResizeMode(rateColumn, QtGui.QHeaderView.Fixed)
+        self.sampleView.horizontalHeader().setSectionResizeMode(rateColumn, QtWidgets.QHeaderView.Fixed)
         self.sampleView.horizontalHeader().resizeSection(channelsColumn, fontMetrics.width('Ch.') + 10)
-        self.sampleView.horizontalHeader().setResizeMode(channelsColumn, QtGui.QHeaderView.Fixed)
+        self.sampleView.horizontalHeader().setSectionResizeMode(channelsColumn, QtWidgets.QHeaderView.Fixed)
         self.sampleView.horizontalHeader().resizeSection(subtypeColumn, fontMetrics.width('Bits') + 12)
-        self.sampleView.horizontalHeader().setResizeMode(subtypeColumn, QtGui.QHeaderView.Fixed)
+        self.sampleView.horizontalHeader().setSectionResizeMode(subtypeColumn, QtWidgets.QHeaderView.Fixed)
 
         self.selectAllBtn.clicked.connect(self.sampleView.selectAll)
         self.checkSelectedBtn.clicked.connect(lambda: self.setSelectedCheckState(QtCore.Qt.Checked))
@@ -178,10 +178,10 @@ class ImportDialog(QtGui.QDialog):
             self.sampleProxyModel.setData(index, res, TagsRole)
 
     def sampleContextMenu(self, pos):
-        menu = QtGui.QMenu()
-        setCheckedAction = QtGui.QAction('Set for import', menu)
-        unsetCheckedAction = QtGui.QAction('Unset for import', menu)
-        editTagsAction = QtGui.QAction('Edit tags...', menu)
+        menu = QtWidgets.QMenu()
+        setCheckedAction = QtWidgets.QAction('Set for import', menu)
+        unsetCheckedAction = QtWidgets.QAction('Unset for import', menu)
+        editTagsAction = QtWidgets.QAction('Edit tags...', menu)
 
         selIndexes = self.sampleView.selectionModel().selection().indexes()
         if selIndexes:
@@ -195,9 +195,9 @@ class ImportDialog(QtGui.QDialog):
             setCheckedAction.setEnabled(False)
             unsetCheckedAction.setEnabled(False)
             editTagsAction.setEnabled(False)
-        sep = QtGui.QAction(menu)
+        sep = QtWidgets.QAction(menu)
         sep.setSeparator(True)
-        selectAllAction = QtGui.QAction('Select all', menu)
+        selectAllAction = QtWidgets.QAction('Select all', menu)
 
         menu.addActions([setCheckedAction, unsetCheckedAction, editTagsAction, sep, selectAllAction])
         res = menu.exec_(self.sampleView.viewport().mapToGlobal(pos))
@@ -226,7 +226,7 @@ class ImportDialog(QtGui.QDialog):
         self.selectedLbl.setText(str(checked))
 
     def exec_(self):
-        res = QtGui.QDialog.exec_(self)
+        res = QtWidgets.QDialog.exec_(self)
         if res:
             sampleList = []
             for row in range(self.sampleModel.rowCount()):
@@ -250,7 +250,7 @@ class ImportDialogScan(ImportDialog):
         self.crawlerThread = QtCore.QThread()
         self.crawler.moveToThread(self.crawlerThread)
         self.crawlerThread.started.connect(self.crawler.run)
-        self.popup = QtGui.QMessageBox(QtGui.QMessageBox.Information, 'Scanning...', 'Scanning disk, please wait.', QtGui.QMessageBox.Cancel, self)
+        self.popup = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Information, 'Scanning...', 'Scanning disk, please wait.', QtWidgets.QMessageBox.Cancel, self)
         self.popup.setModal(True)
 #        self.popup.rejected.connect(lambda: self.crawler.stop.set())
         self.popup.button(self.popup.Cancel).clicked.connect(lambda: self.crawler.stop.set())
@@ -345,9 +345,9 @@ class ImportDialogScanDnD(ImportDialogScan):
             return ImportDialog.exec_(self)
 
 
-class SampleScanDialog(QtGui.QDialog):
+class SampleScanDialog(QtWidgets.QDialog):
     def __init__(self, parent, dirName=None):
-        QtGui.QDialog.__init__(self, parent)
+        QtWidgets.QDialog.__init__(self, parent)
         uic.loadUi('{}/directoryscan.ui'.format(os.path.dirname(src.__file__)), self)
         if dirName:
             self.dirPathEdit.setText(dirName)
@@ -441,7 +441,7 @@ class SampleScanDialog(QtGui.QDialog):
             self.okBtn.setEnabled(False)
 
     def browse(self):
-        filePath = QtGui.QFileDialog.getExistingDirectory(self, 'Select directory', self.dirPathEdit.text())
+        filePath = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select directory', self.dirPathEdit.text())
         if filePath:
             self.dirPathEdit.setText(filePath)
 
@@ -466,15 +466,15 @@ class SampleScanDialog(QtGui.QDialog):
         return sampleRates
 
 
-class AddSamplesWithTagDialog(QtGui.QDialog):
+class AddSamplesWithTagDialog(QtWidgets.QDialog):
     def __init__(self, parent, fileList):
-        QtGui.QDialog.__init__(self, parent)
+        QtWidgets.QDialog.__init__(self, parent)
         self.setWindowTitle('Add samples to database')
-        layout = QtGui.QGridLayout()
+        layout = QtWidgets.QGridLayout()
         self.setLayout(layout)
-        layout.addWidget(QtGui.QLabel('The following samples are about to be added to the database'))
+        layout.addWidget(QtWidgets.QLabel('The following samples are about to be added to the database'))
         sampleModel = QtGui.QStandardItemModel()
-        sampleView = QtGui.QTableView()
+        sampleView = QtWidgets.QTableView()
         sampleView.setHorizontalScrollMode(sampleView.ScrollPerPixel)
         sampleView.setVerticalScrollMode(sampleView.ScrollPerPixel)
         sampleView.setMaximumHeight(100)
@@ -496,32 +496,32 @@ class AddSamplesWithTagDialog(QtGui.QDialog):
         sampleView.resizeColumnsToContents()
         sampleView.resizeRowsToContents()
 #        sampleView.setStretchLastSection(True)
-        layout.addWidget(QtGui.QLabel('Tags that will be applied to all of them (separate tags with commas):'))
+        layout.addWidget(QtWidgets.QLabel('Tags that will be applied to all of them (separate tags with commas):'))
         self.tagsEditor = TagsEditorTextEdit()
         self.tagsEditor.setMaximumHeight(100)
 #        self.tagsEditor.setReadOnly(False)
         layout.addWidget(self.tagsEditor)
-        self.buttonBox = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok|QtGui.QDialogButtonBox.Cancel)
+        self.buttonBox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok|QtWidgets.QDialogButtonBox.Cancel)
         self.buttonBox.button(self.buttonBox.Ok).clicked.connect(self.accept)
         self.buttonBox.button(self.buttonBox.Cancel).clicked.connect(self.reject)
         layout.addWidget(self.buttonBox)
 
     def exec_(self):
-        res = QtGui.QDialog.exec_(self)
+        res = QtWidgets.QDialog.exec_(self)
         if res:
             return self.tagsEditor.tags()
         else:
             return res
 
-class RemoveSamplesDialog(QtGui.QDialog):
+class RemoveSamplesDialog(QtWidgets.QDialog):
     def __init__(self, parent, fileList):
-        QtGui.QDialog.__init__(self, parent)
+        QtWidgets.QDialog.__init__(self, parent)
         self.setWindowTitle('Remove samples from database')
-        layout = QtGui.QGridLayout()
+        layout = QtWidgets.QGridLayout()
         self.setLayout(layout)
-        layout.addWidget(QtGui.QLabel('Remove the following samples from the database?'))
+        layout.addWidget(QtWidgets.QLabel('Remove the following samples from the database?'))
         sampleModel = QtGui.QStandardItemModel()
-        sampleView = QtGui.QTableView()
+        sampleView = QtWidgets.QTableView()
         sampleView.setHorizontalScrollMode(sampleView.ScrollPerPixel)
         sampleView.setVerticalScrollMode(sampleView.ScrollPerPixel)
         sampleView.setMaximumHeight(100)
@@ -542,38 +542,38 @@ class RemoveSamplesDialog(QtGui.QDialog):
                 sampleModel.appendRow([fileItem, filePathItem])
         sampleView.resizeColumnsToContents()
         sampleView.resizeRowsToContents()
-        self.buttonBox = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok|QtGui.QDialogButtonBox.Cancel)
+        self.buttonBox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok|QtWidgets.QDialogButtonBox.Cancel)
         self.buttonBox.button(self.buttonBox.Ok).clicked.connect(self.accept)
         self.buttonBox.button(self.buttonBox.Cancel).clicked.connect(self.reject)
         layout.addWidget(self.buttonBox)
 
 
-class TagsEditorDialog(QtGui.QDialog):
+class TagsEditorDialog(QtWidgets.QDialog):
     def __init__(self, parent, tags, fileName=None, uncommon=False):
-        QtGui.QDialog.__init__(self, parent)
+        QtWidgets.QDialog.__init__(self, parent)
         self.setWindowTitle('Edit tags')
-        layout = QtGui.QGridLayout()
+        layout = QtWidgets.QGridLayout()
         self.setLayout(layout)
         if fileName:
-            headerLbl = QtGui.QLabel('Edit tags for sample "{}".\nSeparate tags with commas.'.format(fileName))
+            headerLbl = QtWidgets.QLabel('Edit tags for sample "{}".\nSeparate tags with commas.'.format(fileName))
         else:
             text = 'Edit tags for selected samples.'
             if uncommon:
                 text += '\nTags for selected samples do not match, be careful!'
             text += '\nSeparate tags with commas.'
-            headerLbl = QtGui.QLabel(text)
+            headerLbl = QtWidgets.QLabel(text)
         layout.addWidget(headerLbl)
         self.tagsEditor = TagsEditorTextEdit()
         self.tagsEditor.setTags(tags)
 #        self.tagsEditor.setReadOnly(False)
         layout.addWidget(self.tagsEditor)
-        self.buttonBox = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok|QtGui.QDialogButtonBox.Cancel)
+        self.buttonBox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok|QtWidgets.QDialogButtonBox.Cancel)
         self.buttonBox.button(self.buttonBox.Ok).clicked.connect(self.accept)
         self.buttonBox.button(self.buttonBox.Cancel).clicked.connect(self.reject)
         layout.addWidget(self.buttonBox)
 
     def exec_(self):
-        res = QtGui.QDialog.exec_(self)
+        res = QtWidgets.QDialog.exec_(self)
         if res:
             return self.tagsEditor.tags()
         else:

@@ -1,14 +1,14 @@
 import re
 from .advsplitter import *
 from .delegates import *
-from PyQt4 import QtCore, QtGui
+from PyQt5 import QtCore, QtWidgets
 
 
-class ColorLineEdit(QtGui.QLineEdit):
+class ColorLineEdit(QtWidgets.QLineEdit):
     editBtnClicked = QtCore.pyqtSignal()
     def __init__(self, *args, **kwargs):
-        QtGui.QLineEdit.__init__(self, *args, **kwargs)
-        self.editBtn = QtGui.QPushButton('...', self)
+        QtWidgets.QLineEdit.__init__(self, *args, **kwargs)
+        self.editBtn = QtWidgets.QPushButton('...', self)
         self.editBtn.setCursor(QtCore.Qt.ArrowCursor)
         self.editBtn.clicked.connect(self.editBtnClicked.emit)
 
@@ -42,9 +42,9 @@ class DropTimer(QtCore.QTimer):
         self.currentIndex = index
         QtCore.QTimer.start(self)
 
-class TreeViewWithLines(QtGui.QTreeView):
+class TreeViewWithLines(QtWidgets.QTreeView):
     def drawRow(self, painter, option, index):
-        QtGui.QTreeView.drawRow(self, painter, option, index)
+        QtWidgets.QTreeView.drawRow(self, painter, option, index)
         painter.setPen(QtCore.Qt.lightGray)
         y = option.rect.y()
         painter.save()
@@ -60,7 +60,7 @@ class DbTreeView(TreeViewWithLines):
     samplesAddedToTag = QtCore.pyqtSignal(object, str)
     samplesImported = QtCore.pyqtSignal(object, object)
     def __init__(self, main, *args, **kwargs):
-        QtGui.QTreeView.__init__(self, *args, **kwargs)
+        QtWidgets.QTreeView.__init__(self, *args, **kwargs)
         self.main = main
         self.setAcceptDrops(True)
         #something is wrong with setAutoExpandDelay, we use a custom QTimer
@@ -108,7 +108,7 @@ class DbTreeView(TreeViewWithLines):
             #to enable item highlight at least for dbmodel drag we need this,
             #otherwise it will not show the right cursor icon when dragging from external sources
             if 'application/x-qabstractitemmodeldatalist' in event.mimeData().formats():
-                QtGui.QTreeView.dragMoveEvent(self, event)
+                QtWidgets.QTreeView.dragMoveEvent(self, event)
 
     def dragLeaveEvent(self, event):
         self.currentTagIndex = None
@@ -179,10 +179,10 @@ class DbTreeView(TreeViewWithLines):
             self.samplesImported.emit([(filePath, fileName, info, tags) for (filePath, fileName, info, tags) in res], currentTagIndex)
 
 
-class TagsEditorTextEdit(QtGui.QTextEdit):
+class TagsEditorTextEdit(QtWidgets.QTextEdit):
     tagsApplied = QtCore.pyqtSignal(object)
     def __init__(self, *args, **kwargs):
-        QtGui.QTextEdit.__init__(self, *args, **kwargs)
+        QtWidgets.QTextEdit.__init__(self, *args, **kwargs)
         self.document().setDefaultStyleSheet('''
             span {
                 background-color: rgba(200,200,200,150);
@@ -193,7 +193,7 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
                 }
             ''')
         self.textChanged.connect(self.checkText)
-        self.applyBtn = QtGui.QPushButton('Apply', self)
+        self.applyBtn = QtWidgets.QPushButton('Apply', self)
         self.applyBtn.setMaximumSize(self.applyBtn.fontMetrics().width('Apply') + 4, self.applyBtn.fontMetrics().height() + 2)
         self.applyBtn.setVisible(False)
         self.applyBtn.clicked.connect(self.applyTags)
@@ -206,7 +206,7 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
             if event.key() == QtCore.Qt.Key_Tab:
                 event.ignore()
                 return
-            return QtGui.QTextEdit.keyPressEvent(self, event)
+            return QtWidgets.QTextEdit.keyPressEvent(self, event)
         else:
             if event.key() == QtCore.Qt.Key_Escape:
                 self.textChanged.disconnect(self.checkText)
@@ -219,7 +219,7 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
                 self.clearFocus()
                 self.applyTags()
             else:
-                return QtGui.QTextEdit.keyPressEvent(self, event)
+                return QtWidgets.QTextEdit.keyPressEvent(self, event)
 
     def applyTags(self):
         self.checkText()
@@ -244,7 +244,7 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
         tags = []
         for tag in tagList.split(','):
             tags.append(tag.lstrip().lstrip('/').strip('\n'))
-        QtGui.QTextEdit.setHtml(self, '<span>{}</span>'.format('</span><span class="sep">,</span><span>'.join(tags)))
+        QtWidgets.QTextEdit.setHtml(self, '<span>{}</span>'.format('</span><span class="sep">,</span><span>'.join(tags)))
 
     def setTags(self, tagList):
         self._tagList = [tag for tag in tagList if tag is not None]
@@ -271,7 +271,7 @@ class TagsEditorTextEdit(QtGui.QTextEdit):
         self.applyBtn.setVisible(False)
 
     def resizeEvent(self, event):
-        QtGui.QTextEdit.resizeEvent(self, event)
+        QtWidgets.QTextEdit.resizeEvent(self, event)
         self.moveApplyBtn()
 
 

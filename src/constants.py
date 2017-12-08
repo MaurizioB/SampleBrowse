@@ -1,4 +1,4 @@
-from PyQt4 import QtCore
+from PyQt5 import QtCore
 import soundfile
 
 availableFormats = tuple(f.lower() for f in soundfile.available_formats().keys())

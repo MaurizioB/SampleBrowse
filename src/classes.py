@@ -1,6 +1,6 @@
 from threading import Event
 import soundfile
-from PyQt4 import QtCore, QtGui
+from PyQt5 import QtCore, QtGui
 from src.constants import *
 
 
@@ -202,7 +202,7 @@ class TagsModel(QtGui.QStandardItemModel):
         self.dataChanged.connect(self.updateTags)
 
 
-class SampleSortFilterProxyModel(QtGui.QSortFilterProxyModel):
+class SampleSortFilterProxyModel(QtCore.QSortFilterProxyModel):
     def itemFromIndex(self, index):
         return self.sourceModel().itemFromIndex(self.mapToSource(index))
 

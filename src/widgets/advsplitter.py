@@ -2,28 +2,28 @@
 # *-* coding: utf-8 *-*
 
 import sys
-from PyQt4 import QtCore, QtGui
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 
-class SplitterHandle(QtGui.QSplitterHandle):
-    moved = QtCore.pyqtSignal(object)
-    acquired = QtCore.pyqtSignal(object)
-    released = QtCore.pyqtSignal(object)
+class SplitterHandle(QtWidgets.QSplitterHandle):
+    moved = QtCore.pyqtSignal(QtCore.QPoint)
+    acquired = QtCore.pyqtSignal(QtCore.QPoint)
+    released = QtCore.pyqtSignal(QtCore.QPoint)
     grad = QtGui.QConicalGradient(.5, .5, -45)
     grad.setCoordinateMode(grad.ObjectBoundingMode)
     grad.setColorAt(0, QtCore.Qt.white)
     grad.setColorAt(.5, QtCore.Qt.lightGray)
     grad.setColorAt(1, QtCore.Qt.white)
     def mousePressEvent(self, event):
-        QtGui.QSplitterHandle.mousePressEvent(self, event)
+        QtWidgets.QSplitterHandle.mousePressEvent(self, event)
         self.acquired.emit(event.pos())
 
     def mouseMoveEvent(self, event):
-        QtGui.QSplitterHandle.mouseMoveEvent(self, event)
+        QtWidgets.QSplitterHandle.mouseMoveEvent(self, event)
         self.moved.emit(event.pos())
 
     def mouseReleaseEvent(self, event):
-        QtGui.QSplitterHandle.mouseReleaseEvent(self, event)
+        QtWidgets.QSplitterHandle.mouseReleaseEvent(self, event)
         self.released.emit(event.pos())
 
     def paintEvent(self, event):
@@ -45,7 +45,7 @@ class SplitterHandle(QtGui.QSplitterHandle):
         qp.end()
 
 
-class SplitterHeader(QtGui.QWidget):
+class SplitterHeader(QtWidgets.QWidget):
     upPath = QtGui.QPainterPath()
     upPath.moveTo(0, 6)
     upPath.lineTo(4, 0)
@@ -57,14 +57,14 @@ class SplitterHeader(QtGui.QWidget):
     arrowPaths = upPath, downPath
     toggled = QtCore.pyqtSignal(bool)
     def __init__(self, text='', orientation=QtCore.Qt.Vertical, hideable=True):
-        QtGui.QWidget.__init__(self)
+        QtWidgets.QWidget.__init__(self)
         self.text = text
         self.hideable = hideable
-        self.setSizePolicy(QtGui.QSizePolicy(QtGui.QSizePolicy.Preferred, QtGui.QSizePolicy.Maximum))
+        self.setSizePolicy(QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum))
         self.state = False
 
         self._borderColor = QtGui.QColor(20, 20, 20, 20)
-        self.hoverBorderAnimation = QtCore.QPropertyAnimation(self, 'borderColor')
+        self.hoverBorderAnimation = QtCore.QPropertyAnimation(self, b'borderColor')
         self.hoverBorderAnimation.setDuration(100)
         self.hoverBorderAnimation.setStartValue(self._borderColor)
         self.hoverBorderAnimation.setEndValue(QtGui.QColor(150, 150, 150, 150))
@@ -116,12 +116,12 @@ class SplitterHeader(QtGui.QWidget):
         self.hoverBorderAnimation.setDirection(self.hoverBorderAnimation.Backward)
         self.hoverBorderAnimation.start()
 
-class SplitterContainer(QtGui.QWidget):
+class SplitterContainer(QtWidgets.QWidget):
     def __init__(self, widget, label, orientation=QtCore.Qt.Vertical, collapsible=True, hideable=True):
-        QtGui.QWidget.__init__(self)
+        QtWidgets.QWidget.__init__(self)
         self.widget = widget
         self.collapsible = collapsible
-        layout = QtGui.QHBoxLayout() if orientation == QtCore.Qt.Horizontal else QtGui.QVBoxLayout()
+        layout = QtWidgets.QHBoxLayout() if orientation == QtCore.Qt.Horizontal else QtWidgets.QVBoxLayout()
         layout.setSizeConstraint(layout.SetMinimumSize)
         layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(layout)
@@ -129,7 +129,7 @@ class SplitterContainer(QtGui.QWidget):
         self.header.toggled.connect(self.setCollapsed)
         layout.addWidget(self.header)
         layout.addWidget(widget)
-        widget.setSizePolicy(QtGui.QSizePolicy(QtGui.QSizePolicy.Preferred, QtGui.QSizePolicy.Preferred))
+        widget.setSizePolicy(QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred))
         self.handlePos = QtCore.QPoint()
         self.referencePos = QtCore.QPoint()
 
@@ -199,9 +199,9 @@ class SplitterContainer(QtGui.QWidget):
         return self.widget.sizeHint()
 
 
-class AdvancedSplitter(QtGui.QSplitter):
+class AdvancedSplitter(QtWidgets.QSplitter):
     def __init__(self, *args, **kwargs):
-        QtGui.QSplitter.__init__(self, *args, **kwargs)
+        QtWidgets.QSplitter.__init__(self, *args, **kwargs)
         self.setHandleWidth(7)
 
     def createHandle(self):
@@ -209,32 +209,32 @@ class AdvancedSplitter(QtGui.QSplitter):
 
     def addWidget(self, widget, label=None, collapsible=True, hideable=True):
         if label is None:
-            QtGui.QSplitter.addWidget(self, widget)
-            QtGui.QSplitter.setCollapsible(self, self.indexOf(widget), collapsible)
+            QtWidgets.QSplitter.addWidget(self, widget)
+            QtWidgets.QSplitter.setCollapsible(self, self.indexOf(widget), collapsible)
             return
         parentWidget = SplitterContainer(widget, label, orientation=self.orientation(), collapsible=collapsible, hideable=hideable)
-        QtGui.QSplitter.addWidget(self, parentWidget)
+        QtWidgets.QSplitter.addWidget(self, parentWidget)
         index = self.indexOf(parentWidget)
-        QtGui.QSplitter.setCollapsible(self, index, False)
+        QtWidgets.QSplitter.setCollapsible(self, index, False)
         parentWidget.setHandle(self.handle(index))
 
 
-class _ExampleWidget(QtGui.QWidget):
+class _ExampleWidget(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
-        QtGui.QWidget.__init__(self, *args, **kwargs)
-        layout = QtGui.QGridLayout()
+        QtWidgets.QWidget.__init__(self, *args, **kwargs)
+        layout = QtWidgets.QGridLayout()
         self.setLayout(layout)
         self.splitter = AdvancedSplitter(QtCore.Qt.Vertical)
         layout.addWidget(self.splitter)
-        edit = QtGui.QLineEdit()
+        edit = QtWidgets.QLineEdit()
         self.splitter.addWidget(edit)
-        tree = QtGui.QTreeView()
+        tree = QtWidgets.QTreeView()
         self.splitter.addWidget(tree, label='Tree with very long text header', collapsible=False)
-        self.splitter.addWidget(QtGui.QPushButton('Some button'), label='Another header')
+        self.splitter.addWidget(QtWidgets.QPushButton('Some button'), label='Another header')
 
 
 def _main():
-    app = QtGui.QApplication(sys.argv)
+    app = QtWidgets.QApplication(sys.argv)
     player = _ExampleWidget()
     player.show()
     sys.exit(app.exec_())

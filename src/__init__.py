@@ -4,8 +4,8 @@
 import sys
 import os
 import sqlite3
-from queue import Queue
-from PyQt4 import QtCore, QtGui, QtMultimedia, uic
+from math import log
+from PyQt5 import QtCore, QtGui, QtMultimedia, QtWidgets, uic
 import soundfile
 import numpy as np
 
@@ -14,32 +14,32 @@ from src.constants import *
 from src.dialogs import *
 from src.classes import *
 
-class EllipsisLabel(QtGui.QLabel):
+class EllipsisLabel(QtWidgets.QLabel):
     def __init__(self, *args, **kwargs):
-        QtGui.QLabel.__init__(self, *args, **kwargs)
+        QtWidgets.QLabel.__init__(self, *args, **kwargs)
         self._text = self.text()
 
     def minimumSizeHint(self):
-        default = QtGui.QLabel.minimumSizeHint(self)
+        default = QtWidgets.QLabel.minimumSizeHint(self)
         return QtCore.QSize(10, default.height())
 
     def setText(self, text):
         self._text = text
-        QtGui.QLabel.setText(self, text)
+        QtWidgets.QLabel.setText(self, text)
 
     def resizeEvent(self, event):
-        QtGui.QLabel.setText(self, self.fontMetrics().elidedText(self._text, QtCore.Qt.ElideMiddle, self.width()))
+        QtWidgets.QLabel.setText(self, self.fontMetrics().elidedText(self._text, QtCore.Qt.ElideMiddle, self.width()))
 
 
-class TagTreeDelegate(QtGui.QStyledItemDelegate):
+class TagTreeDelegate(QtWidgets.QStyledItemDelegate):
     tagColorsChanged = QtCore.pyqtSignal(object, object, object)
     startEditTag = QtCore.pyqtSignal(object)
     def editorEvent(self, event, model, _option, index):
         if event.type() == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.RightButton:
             if index != model.index(0, 0):
-                menu = QtGui.QMenu()
-                editTagAction = QtGui.QAction('Rename tag...', menu)
-                editColorAction = QtGui.QAction('Edit tag color...', menu)
+                menu = QtWidgets.QMenu()
+                editTagAction = QtWidgets.QAction('Rename tag...', menu)
+                editColorAction = QtWidgets.QAction('Edit tag color...', menu)
                 menu.addActions([editTagAction, editColorAction])
                 res = menu.exec_(_option.widget.viewport().mapToGlobal(event.pos()))
                 if res == editColorAction:
@@ -52,20 +52,20 @@ class TagTreeDelegate(QtGui.QStyledItemDelegate):
                     self.startEditTag.emit(index)
                 return True
             return True
-        return QtGui.QStyledItemDelegate.editorEvent(self, event, model, _option, index)
+        return QtWidgets.QStyledItemDelegate.editorEvent(self, event, model, _option, index)
 
     def createEditor(self, parent, option, index):
-        widget = QtGui.QStyledItemDelegate.createEditor(self, parent, option, index)
+        widget = QtWidgets.QStyledItemDelegate.createEditor(self, parent, option, index)
         widget.setValidator(QtGui.QRegExpValidator(QtCore.QRegExp(r'[^\/,]+')))
         return widget
 
     def setModelData(self, widget, model, index):
         if not widget.text():
             return
-        QtGui.QStyledItemDelegate.setModelData(self, widget, model, index)
+        QtWidgets.QStyledItemDelegate.setModelData(self, widget, model, index)
 
 
-class WaveScene(QtGui.QGraphicsScene):
+class WaveScene(QtWidgets.QGraphicsScene):
     _orange = QtGui.QColor()
     _orange.setNamedColor('orangered')
     waveGrad = QtGui.QLinearGradient(0, -1, 0, 1)
@@ -79,7 +79,7 @@ class WaveScene(QtGui.QGraphicsScene):
     waveBrush = QtGui.QBrush(waveGrad)
 
     def __init__(self, *args, **kwargs):
-        QtGui.QGraphicsScene.__init__(self, *args, **kwargs)
+        QtWidgets.QGraphicsScene.__init__(self, *args, **kwargs)
         self.waveRect = QtCore.QRectF()
         self.wavePen = QtGui.QPen(QtCore.Qt.NoPen)
         self.zeroPen = QtGui.QPen(QtCore.Qt.lightGray)
@@ -93,10 +93,11 @@ class WaveScene(QtGui.QGraphicsScene):
     def movePlayhead(self, pos):
         self.playhead.setX(pos)
 
-    def drawWave(self, data, dtype):
+    def drawWave(self, data, dtype=None):
         left, right = data
         self.clear()
-        self.playhead = self.addLine(-50, -2, -50, 4)
+        self.playhead = self.addLine(-10, -100, -10, 100)
+        self.playhead.setFlags(self.playhead.flags() ^ self.playhead.ItemIgnoresTransformations)
         path = QtGui.QPainterPath()
         pos = 0
         path.moveTo(0, 0)
@@ -113,6 +114,7 @@ class WaveScene(QtGui.QGraphicsScene):
         path.closeSubpath()
         leftPath = self.addPath(path, self.wavePen, self.waveBrush)
         leftLine = self.addLine(0, 0, leftPath.boundingRect().width(), 0, self.zeroPen)
+        leftLine.setFlags(leftLine.flags() ^ leftLine.ItemIgnoresTransformations)
         if not right:
             self.waveRect = QtCore.QRectF(0, -1, leftPath.boundingRect().width(), 2)
             return
@@ -133,7 +135,8 @@ class WaveScene(QtGui.QGraphicsScene):
         path.closeSubpath()
         path.translate(0, 2)
         rightPath = self.addPath(path, self.wavePen, self.waveBrush)
-        rightLine = self.addLine(0, 2, rightPath.boundingRect().width(), 2, self.zeroPen)
+        rightLine = self.addLine(0, 50, rightPath.boundingRect().width(), 50, self.zeroPen)
+        rightLine.setFlags(rightLine.flags() ^ rightLine.ItemIgnoresTransformations)
         leftText = self.addText('L')
         leftText.setY(-1)
         leftText.setFlag(leftText.ItemIgnoresTransformations, True)
@@ -173,9 +176,9 @@ class DownArrowIcon(QtGui.QIcon):
         QtGui.QIcon.__init__(self, pm)
 
 
-class VerticalDownToggleBtn(QtGui.QToolButton):
+class VerticalDownToggleBtn(QtWidgets.QToolButton):
     def __init__(self, *args, **kwargs):
-        QtGui.QToolButton.__init__(self, *args, **kwargs)
+        QtWidgets.QToolButton.__init__(self, *args, **kwargs)
         self.upIcon = UpArrowIcon()
         self.downIcon = DownArrowIcon()
         self.setMaximumSize(16, 16)
@@ -206,25 +209,29 @@ class Player(QtCore.QObject):
         self.main = main
 
         self.audioDevice = audioDevice if audioDevice else QtMultimedia.QAudioDeviceInfo.defaultOutputDevice()
-        self.sampleSize = 32 if 32 in self.audioDevice.supportedSampleSizes() else 16
-        self.sampleRate = 48000 if 48000 in self.audioDevice.supportedSampleRates() else 44100
+        sampleSize = 32 if 32 in self.audioDevice.supportedSampleSizes() else 16
+        sampleRate = 48000 if 48000 in self.audioDevice.supportedSampleRates() else 44100
 
         format = QtMultimedia.QAudioFormat()
-        format.setFrequency(self.sampleRate)
-        format.setChannels(2)
-        format.setSampleSize(self.sampleSize)
+        format.setSampleRate(sampleRate)
+        format.setChannelCount(2)
+        format.setSampleSize(sampleSize)
         format.setCodec('audio/pcm')
         format.setByteOrder(QtMultimedia.QAudioFormat.LittleEndian)
-        format.setSampleType(QtMultimedia.QAudioFormat.Float if self.sampleSize >= 32 else QtMultimedia.QAudioFormat.SignedInt)
+        format.setSampleType(QtMultimedia.QAudioFormat.Float if sampleSize >= 32 else QtMultimedia.QAudioFormat.SignedInt)
 
+        if not self.audioDevice.isFormatSupported(format):
+            format = self.audioDevice.nearestFormat(format)
+            #do something with self.audioDevice.nearestFormat(format)
+        self.sampleSize = format.sampleSize()
+        self.sampleRate = format.sampleRate()
         self.output = QtMultimedia.QAudioOutput(format)
-        print(self.audioDevice.isFormatSupported(format))
         self.output.setNotifyInterval(50)
         self.output.stateChanged.connect(self.stateChanged)
         self.output.notify.connect(self.notify)
-        self.dtype = 'float32' if self.sampleSize >= 32 else 'int16'
+#        self.dtype = 'float32' if self.sampleSize >= 32 else 'int16'
 
-        self.audioQueue = Queue()
+#        self.audioQueue = Queue()
         self.audioBufferArray = QtCore.QBuffer(self)
 
     def isPlaying(self):
@@ -238,30 +245,66 @@ class Player(QtCore.QObject):
         else:
             self.paused.emit()
 
-    def run(self):
-        while True:
-            res = self.audioQueue.get()
-            if res == -1:
-                break
-            self.output.stop()
-            self.audioBufferArray.close()
-            self.audioBufferArray.setData(res)
-            self.audioBufferArray.open(QtCore.QIODevice.ReadOnly)
-            self.audioBufferArray.seek(0)
-            self.output.start(self.audioBufferArray)
-        self.output.stop()
-
-    def quit(self):
-        self.audioQueue.put(-1)
+#    def run(self):
+#        while True:
+#            res = self.audioQueue.get()
+#            if res == -1:
+#                break
+#            self.output.stop()
+#            self.audioBufferArray.close()
+#            self.audioBufferArray.setData(res)
+#            self.audioBufferArray.open(QtCore.QIODevice.ReadOnly)
+#            self.audioBufferArray.seek(0)
+#            self.output.start(self.audioBufferArray)
+#        self.output.stop()
 
     def stop(self):
         self.output.stop()
 
-    def play(self, array):
-        self.audioQueue.put(array)
+    def play(self, waveData, info):
+        if info.channels == 1:
+            waveData = waveData.repeat(2, axis=1)/2
+        elif info.channels == 2:
+            pass
+        elif info.channels == 3:
+            front = waveData[:, [0, 1]]/1.5
+            center = waveData[:, [2]].repeat(2, axis=1)/2
+            waveData = front + center
+        elif info.channels == 4:
+            front = waveData[:, [0, 1]]/2
+            rear = waveData[:, [2, 3]]/2
+            waveData = front + rear
+        elif info.channels == 5:
+            front = waveData[:, [0, 1]]/2.5
+            rear = waveData[:, [2, 3]]/2.5
+            center = waveData[:, [4]].repeat(2, axis=1)/2
+            waveData = front + rear + center
+        elif info.channels == 6:
+            front = waveData[:, [0, 1]]/3
+            rear = waveData[:, [2, 3]]/3
+            center = waveData[:, [4]].repeat(2, axis=1)/2
+            sub = waveData[:, [5]].repeate(2, axis=1)/2
+            waveData = front + rear + center + sub
+        if self.sampleSize == 16:
+            waveData = (waveData * 32767).astype('int16')
+        self.audioBufferArray.close()
+        self.audioBufferArray.setData(waveData.tostring())
+        self.audioBufferArray.open(QtCore.QIODevice.ReadOnly)
+        self.audioBufferArray.seek(0)
+        self.output.start(self.audioBufferArray)
+
+    def setVolume(self, volume):
+#        try:
+#            volume = QtMultimedia.QAudio.convertVolume(volume / 100, QtMultimedia.QAudio.LogarithmicVolumeScale, QtMultimedia.QAudio.LinearVolumeScale)
+#        except:
+#            if volume >= 100:
+#                volume = 1
+#            else:
+#                volume = -log(1 - volume/100) / 4.60517018599
+        self.output.setVolume(volume/100)
 
 
-class SampleView(QtGui.QTableView):
+class SampleView(QtWidgets.QTableView):
     def viewportEvent(self, event):
         if event.type() == QtCore.QEvent.ToolTip:
             index = self.indexAt(event.pos())
@@ -317,42 +360,38 @@ class SampleView(QtGui.QTableView):
                     )
             else:
                 self.setToolTip('')
-                QtGui.QToolTip.showText(event.pos(), '')
-        return QtGui.QTableView.viewportEvent(self, event)
+                QtWidgets.QToolTip.showText(event.pos(), '')
+        return QtWidgets.QTableView.viewportEvent(self, event)
 
 
-class SampleBrowse(QtGui.QMainWindow):
+class SampleBrowse(QtWidgets.QMainWindow):
     def __init__(self):
-        QtGui.QMainWindow.__init__(self)
+        QtWidgets.QMainWindow.__init__(self)
         uic.loadUi('{}/main.ui'.format(os.path.dirname(constants.__file__)), self)
         self.settings = QtCore.QSettings()
         self.player = Player(self)
         self.player.stopped.connect(self.stopped)
         self.player.output.notify.connect(self.movePlayhead)
-        self.playerThread = QtCore.QThread()
-        self.player.moveToThread(self.playerThread)
-        self.playerThread.started.connect(self.player.run)
         self.sampleSize = self.player.sampleSize
         self.sampleRate = self.player.sampleRate
-        self.dtype = self.player.dtype
 
         self.browseSelectGroup.setId(self.browseSystemBtn, 0)
         self.browseSelectGroup.setId(self.browseDbBtn, 1)
-        self.volumeSpin.valueChanged.connect(self.setVolumeSpinColor)
         self.volumeSlider.mousePressEvent = self.volumeSliderMousePressEvent
+        self.volumeSlider.valueChanged.connect(self.player.setVolume)
 
-        self.browserStackedWidget = QtGui.QWidget()
-        self.browserStackedLayout = QtGui.QStackedLayout()
+        self.browserStackedWidget = QtWidgets.QWidget()
+        self.browserStackedLayout = QtWidgets.QStackedLayout()
         self.browserStackedWidget.setLayout(self.browserStackedLayout)
         self.mainSplitter.insertWidget(0, self.browserStackedWidget)
 
         self.fsSplitter = AdvancedSplitter(QtCore.Qt.Vertical)
         self.browserStackedLayout.addWidget(self.fsSplitter)
-        self.fsView = QtGui.QTreeView()
+        self.fsView = QtWidgets.QTreeView()
         self.fsSplitter.addWidget(self.fsView, collapsible=False)
         self.fsView.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.fsView.setHeaderHidden(True)
-        self.favouritesTable = QtGui.QTableView()
+        self.favouritesTable = QtWidgets.QTableView()
         self.fsSplitter.addWidget(self.favouritesTable, label='Favourites')
         self.favouritesTable.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.favouritesTable.setSelectionBehavior(self.favouritesTable.SelectRows)
@@ -361,9 +400,9 @@ class SampleBrowse(QtGui.QMainWindow):
         self.favouritesTable.horizontalHeader().setHighlightSections(False)
         self.favouritesTable.verticalHeader().setVisible(False)
         
-        self.fsModel = QtGui.QFileSystemModel()
-        self.fsModel.setFilter(QtCore.QDir.AllDirs|QtCore.QDir.NoDotAndDotDot)
-        self.fsProxyModel = QtGui.QSortFilterProxyModel()
+        self.fsModel = QtWidgets.QFileSystemModel()
+        self.fsModel.setFilter(QtCore.QDir.AllDirs|QtCore.QDir.NoDot | QtCore.QDir.NoDotDot)
+        self.fsProxyModel = QtCore.QSortFilterProxyModel()
         self.fsProxyModel.setSourceModel(self.fsModel)
         self.fsView.setModel(self.fsProxyModel)
         for c in range(1, self.fsModel.columnCount()):
@@ -403,7 +442,7 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbTreeView.setHeaderHidden(True)
         self.dbTreeModel = TagsModel(self.sampleDb)
         self.dbTreeModel.tagRenamed.connect(self.tagRenamed)
-        self.dbTreeProxyModel = QtGui.QSortFilterProxyModel()
+        self.dbTreeProxyModel = QtCore.QSortFilterProxyModel()
         self.dbTreeProxyModel.setSourceModel(self.dbTreeModel)
         self.dbTreeView.setModel(self.dbTreeProxyModel)
         self.dbTreeView.doubleClicked.connect(self.dbTreeViewDoubleClicked)
@@ -418,8 +457,9 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbDirView.setHeaderHidden(True)
         self.dbDirView.header().setStretchLastSection(False)
         self.dbDirView.resizeColumnToContents(1)
-        self.dbDirView.header().setResizeMode(0, QtGui.QHeaderView.Stretch)
-        self.dbDirView.header().setResizeMode(1, QtGui.QHeaderView.ResizeToContents)
+        #TODO: wtf?!
+#        self.dbDirView.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+#        self.dbDirView.header().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
 
         self.dbSplitter.setStretchFactor(0, 50)
         self.dbSplitter.setStretchFactor(1, 1)
@@ -457,18 +497,18 @@ class SampleBrowse(QtGui.QMainWindow):
         self.player.stopped.connect(self.waveScene.hidePlayhead)
         self.player.started.connect(self.waveScene.showPlayhead)
 
-        self.filterStackedLayout = QtGui.QStackedLayout()
+        self.filterStackedLayout = QtWidgets.QStackedLayout()
         self.filterStackedWidget.setLayout(self.filterStackedLayout)
         self.browsePathLbl = EllipsisLabel()
         self.filterStackedLayout.addWidget(self.browsePathLbl)
-        self.filterWidget = QtGui.QWidget()
+        self.filterWidget = QtWidgets.QWidget()
         self.filterWidget.setContentsMargins(0, 0, 0, 0)
         self.filterStackedLayout.addWidget(self.filterWidget)
-        filterLayout = QtGui.QHBoxLayout()
+        filterLayout = QtWidgets.QHBoxLayout()
         filterLayout.setContentsMargins(0, 0, 0, 0)
         self.filterWidget.setLayout(filterLayout)
-        filterLayout.addWidget(QtGui.QLabel('Search'))
-        self.searchEdit = QtGui.QLineEdit()
+        filterLayout.addWidget(QtWidgets.QLabel('Search'))
+        self.searchEdit = QtWidgets.QLineEdit()
         self.searchEdit.textChanged.connect(self.searchDb)
         filterLayout.addWidget(self.searchEdit)
 
@@ -489,13 +529,12 @@ class SampleBrowse(QtGui.QMainWindow):
 
         self.infoTabWidget.setTabEnabled(1, False)
         self.shown = False
-        self.playerThread.start()
 
         self.reloadTags()
         self.dbTreeView.expandToDepth(0)
 
     def loadDb(self):
-        dataDir = QtCore.QDir(QtGui.QDesktopServices.storageLocation(QtGui.QDesktopServices.DataLocation))
+        dataDir = QtCore.QDir(QtCore.QStandardPaths.standardLocations(QtCore.QStandardPaths.AppDataLocation)[0])
         dbFile = QtCore.QFile(dataDir.filePath('sample.sqlite'))
         if not dbFile.exists():
             if not dataDir.exists():
@@ -560,7 +599,7 @@ class SampleBrowse(QtGui.QMainWindow):
         elif event.key() in (QtCore.Qt.Key_Period, QtCore.Qt.Key_Escape):
             self.player.stop()
         else:
-            QtGui.QTableView.keyPressEvent(self.sampleView, event)
+            QtWidgets.QTableView.keyPressEvent(self.sampleView, event)
 
     def cleanFolders(self, path):
         index = self.fsModel.index(path)
@@ -573,16 +612,16 @@ class SampleBrowse(QtGui.QMainWindow):
         dirName = dirIndex.data()
         dirPath = self.fsModel.filePath(self.fsProxyModel.mapToSource(dirIndex))
 
-        menu = QtGui.QMenu()
-        addDirAction = QtGui.QAction(QtGui.QIcon.fromTheme('emblem-favorite'), 'Add "{}" to favourites'.format(dirName), menu)
+        menu = QtWidgets.QMenu()
+        addDirAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('emblem-favorite'), 'Add "{}" to favourites'.format(dirName), menu)
         for row in range(self.favouritesModel.rowCount()):
             dirPathItem = self.favouritesModel.item(row, 1)
             if dirPathItem.text() == dirPath:
                 addDirAction.setEnabled(False)
                 break
-        sep = QtGui.QAction(menu)
+        sep = QtWidgets.QAction(menu)
         sep.setSeparator(True)
-        scanAction = QtGui.QAction(QtGui.QIcon.fromTheme('edit-find'), 'Scan "{}" for samples'.format(dirName), menu)
+        scanAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('edit-find'), 'Scan "{}" for samples'.format(dirName), menu)
 
         menu.addActions([addDirAction, sep, scanAction])
         res = menu.exec_(self.fsView.mapToGlobal(pos))
@@ -650,17 +689,17 @@ class SampleBrowse(QtGui.QMainWindow):
         index = self.favouritesTable.indexAt(event.pos())
         if event.button() != QtCore.Qt.RightButton:
             self.browseFromFavourites(index)
-            return QtGui.QTableView.mousePressEvent(self.favouritesTable, event)
+            return QtWidgets.QTableView.mousePressEvent(self.favouritesTable, event)
         if not index.isValid():
             return
-        QtGui.QTableView.mousePressEvent(self.favouritesTable, event)
+        QtWidgets.QTableView.mousePressEvent(self.favouritesTable, event)
         dirPathIndex = index.sibling(index.row(), 1)
         dirPath = dirPathIndex.data()
-        menu = QtGui.QMenu()
-        scrollToAction = QtGui.QAction(QtGui.QIcon.fromTheme('folder'), 'Show directory in tree', menu)
-        sep = QtGui.QAction(menu)
+        menu = QtWidgets.QMenu()
+        scrollToAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('folder'), 'Show directory in tree', menu)
+        sep = QtWidgets.QAction(menu)
         sep.setSeparator(True)
-        removeAction = QtGui.QAction(QtGui.QIcon.fromTheme('edit-delete'), 'Remove from favourites', menu)
+        removeAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('edit-delete'), 'Remove from favourites', menu)
         menu.addActions([scrollToAction, sep, removeAction])
         res = menu.exec_(self.favouritesTable.viewport().mapToGlobal(event.pos()))
         if res == scrollToAction:
@@ -729,9 +768,9 @@ class SampleBrowse(QtGui.QMainWindow):
             subtypeItem = QtGui.QStandardItem(info.subtype)
             self.browseModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem])
         self.sampleView.resizeColumnsToContents()
-        self.sampleView.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
+        self.sampleView.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         for c in range(1, subtypeColumn + 1):
-            self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
+            self.sampleView.horizontalHeader().setSectionResizeMode(c, QtWidgets.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
         self.browsePathLbl.setText(path.absolutePath())
 
@@ -739,15 +778,7 @@ class SampleBrowse(QtGui.QMainWindow):
         if event.button() == QtCore.Qt.MidButton:
             self.volumeSpin.setValue(100)
         else:
-            QtGui.QSlider.mousePressEvent(self.volumeSlider, event)
-
-    def setVolumeSpinColor(self, value):
-        palette = self.volumeSpin.palette()
-        if value > 100:
-            palette.setColor(palette.Text, QtCore.Qt.red)
-        else:
-            palette.setColor(palette.Text, QtGui.QPalette().color(palette.Active, palette.Text))
-        self.volumeSpin.setPalette(palette)
+            QtWidgets.QSlider.mousePressEvent(self.volumeSlider, event)
 
     def sampleContextMenu(self, pos):
         selIndex = self.sampleView.indexAt(pos)
@@ -761,10 +792,10 @@ class SampleBrowse(QtGui.QMainWindow):
     def singleSampleContextMenu(self, fileIndex, pos):
         fileName = fileIndex.data()
         filePath = fileIndex.data(FilePathRole)
-        menu = QtGui.QMenu()
-        addToDatabaseAction = QtGui.QAction('Add "{}" to database'.format(fileName), menu)
-        editTagsAction = QtGui.QAction('Edit "{}" tags...'.format(fileName), menu)
-        delFromDatabaseAction = QtGui.QAction('Remove "{}" from database'.format(fileName), menu)
+        menu = QtWidgets.QMenu()
+        addToDatabaseAction = QtWidgets.QAction('Add "{}" to database'.format(fileName), menu)
+        editTagsAction = QtWidgets.QAction('Edit "{}" tags...'.format(fileName), menu)
+        delFromDatabaseAction = QtWidgets.QAction('Remove "{}" from database'.format(fileName), menu)
         self.sampleDb.execute('SELECT * FROM samples WHERE filePath=?', (filePath, ))
         if self.sampleView.model() == self.browseModel and not self.sampleDb.fetchone():
             menu.addAction(addToDatabaseAction)
@@ -801,18 +832,18 @@ class SampleBrowse(QtGui.QMainWindow):
                 new.append(fileIndex)
             else:
                 exist.append(fileIndex)
-        menu = QtGui.QMenu()
+        menu = QtWidgets.QMenu()
         if self.sampleView.model() == self.browseModel:
-            removeAllAction = QtGui.QAction('Remove {} existing samples from database'.format(len(exist)), menu)
+            removeAllAction = QtWidgets.QAction('Remove {} existing samples from database'.format(len(exist)), menu)
         else:
-            removeAllAction = QtGui.QAction('Remove selected samples from database', menu)
-        addAllAction = QtGui.QAction('Add selected samples to database', menu)
-        addAllActionWithTags = QtGui.QAction('Add selected samples to database with tags...', menu)
+            removeAllAction = QtWidgets.QAction('Remove selected samples from database', menu)
+        addAllAction = QtWidgets.QAction('Add selected samples to database', menu)
+        addAllActionWithTags = QtWidgets.QAction('Add selected samples to database with tags...', menu)
         if new:
             menu.addActions([addAllAction, addAllActionWithTags])
         if exist:
             if new:
-                sep = QtGui.QAction(menu)
+                sep = QtWidgets.QAction(menu)
                 sep.setSeparator(True)
                 menu.addAction(sep)
             menu.addAction(removeAllAction)
@@ -910,10 +941,10 @@ class SampleBrowse(QtGui.QMainWindow):
 #            self.dbModel.appendRow([fileItem, lengthItem, formatItem, rateItem, channelsItem, tagsItem])
             self.dbModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem, tagsItem])
         self.sampleView.resizeColumnsToContents()
-        self.sampleView.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
-        self.sampleView.horizontalHeader().setResizeMode(1, QtGui.QHeaderView.Stretch)
+        self.sampleView.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        self.sampleView.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
         for c in range(2, subtypeColumn + 1):
-            self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
+            self.sampleView.horizontalHeader().setSectionResizeMode(c, QtWidgets.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
 
     def searchDb(self, text):
@@ -1007,8 +1038,8 @@ class SampleBrowse(QtGui.QMainWindow):
         self.dbTreeModel.setTags(tags)
         self.dbTreeView.sortByColumn(0, QtCore.Qt.AscendingOrder)
         self.dbTreeView.resizeColumnToContents(1)
-        self.dbTreeView.header().setResizeMode(0, QtGui.QHeaderView.Stretch)
-        self.dbTreeView.header().setResizeMode(1, QtGui.QHeaderView.Fixed)
+        self.dbTreeView.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        self.dbTreeView.header().setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
 
     
     def dbTreeViewDoubleClicked(self, index):
@@ -1055,10 +1086,10 @@ class SampleBrowse(QtGui.QMainWindow):
             tagsItem.setData(list(filter(None, tags.split(','))), TagsRole)
             self.dbModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem, tagsItem])
         self.sampleView.resizeColumnsToContents()
-        self.sampleView.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
-        self.sampleView.horizontalHeader().setResizeMode(1, QtGui.QHeaderView.Stretch)
+        self.sampleView.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        self.sampleView.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
         for c in range(2, subtypeColumn + 1):
-            self.sampleView.horizontalHeader().setResizeMode(c, QtGui.QHeaderView.Fixed)
+            self.sampleView.horizontalHeader().setSectionResizeMode(c, QtWidgets.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
 
     def dbDirViewSelect(self, index):
@@ -1124,39 +1155,16 @@ class SampleBrowse(QtGui.QMainWindow):
         fileItem = self.sampleView.model().itemFromIndex(fileIndex)
         info = fileIndex.data(InfoRole)
         waveData = fileItem.data(WaveRole)
-        if info.channels == 1:
-            waveData = waveData.repeat(2, axis=1)/2
-        elif info.channels == 2:
-            pass
-        elif info.channels == 3:
-            front = waveData[:, [0, 1]]/1.5
-            center = waveData[:, [2]].repeat(2, axis=1)/2
-            waveData = front + center
-        elif info.channels == 4:
-            front = waveData[:, [0, 1]]/2
-            rear = waveData[:, [2, 3]]/2
-            waveData = front + rear
-        elif info.channels == 5:
-            front = waveData[:, [0, 1]]/2.5
-            rear = waveData[:, [2, 3]]/2.5
-            center = waveData[:, [4]].repeat(2, axis=1)/2
-            waveData = front + rear + center
-        elif info.channels == 6:
-            front = waveData[:, [0, 1]]/3
-            rear = waveData[:, [2, 3]]/3
-            center = waveData[:, [4]].repeat(2, axis=1)/2
-            sub = waveData[:, [5]].repeate(2, axis=1)/2
-            waveData = front + rear + center + sub
-        waveData = waveData * self.volumeSpin.value()/100.
+#        waveData = waveData * self.volumeSpin.value()/100.
         self.waveScene.movePlayhead(0)
-        self.player.play(waveData.tostring())
+        self.player.play(waveData, info)
         fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-stop'))
 
     def movePlayhead(self):
 #        bytesInBuffer = self.output.bufferSize() - self.output.bytesFree()
 #        usInBuffer = 1000000. * bytesInBuffer / (2 * self.sampleSize / 8) / self.sampleRate
 #        self.waveScene.movePlayhead((self.output.processedUSecs() - usInBuffer) / 200)
-        self.waveScene.movePlayhead(self.waveScene.playhead.x() + self.sampleRate / 200.)
+        self.waveScene.movePlayhead(self.waveScene.playhead.x() + self.player.sampleRate / 200.)
 
     def stopped(self):
         if self.currentSampleIndex:
@@ -1167,7 +1175,7 @@ class SampleBrowse(QtGui.QMainWindow):
 
     def getWaveData(self, filePath):
         with soundfile.SoundFile(filePath) as sf:
-            waveData = sf.read(always_2d=True, dtype=self.dtype)
+            waveData = sf.read(always_2d=True, dtype='float32')
         return waveData
 
     def selectTagOnTree(self, tag):
@@ -1241,7 +1249,7 @@ class SampleBrowse(QtGui.QMainWindow):
             leftData = leftMax, leftMin
             previewData = leftData, rightData
             fileItem.setData(previewData, PreviewRole)
-        self.waveScene.drawWave(previewData, self.dtype)
+        self.waveScene.drawWave(previewData)
         self.waveView.fitInView(self.waveScene.waveRect)
         self.currentShownSampleIndex = fileIndex
 
@@ -1250,7 +1258,7 @@ class SampleBrowse(QtGui.QMainWindow):
 
 
 def main():
-    app = QtGui.QApplication(sys.argv)
+    app = QtWidgets.QApplication(sys.argv)
     app.setOrganizationName('jidesk')
     app.setApplicationName('SampleBrowse')
 
@@ -1258,5 +1266,5 @@ def main():
     player.show()
     sys.exit(app.exec_())
 
-if __name__ == '__main__':
-    main()
+#if __name__ == '__main__':
+#    main()
