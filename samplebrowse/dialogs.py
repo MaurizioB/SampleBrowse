@@ -83,7 +83,7 @@ class AudioSettingsDialog(QtWidgets.QDialog):
             utils.setBold(checkBox, True if sampleSize == preferredFormat.sampleSize() else False)
         self.channelsModel.clear()
         for channelCount in sorted(index.data(ChannelsRole)):
-            item = QtGui.QStandardItem('{}: {}'.format(channelCount, channelsLabels[channelCount]))
+            item = QtGui.QStandardItem('{}: {}'.format(channelCount, channelsLabels.get(channelCount, '(unknown configuration)')))
             if channelCount == preferredFormat.channelCount():
                 utils.setBold(item)
             self.channelsModel.appendRow(item)
