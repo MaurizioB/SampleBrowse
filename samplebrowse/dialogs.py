@@ -107,14 +107,15 @@ class AudioSettingsDialog(QtWidgets.QDialog):
                 deviceItem.setData(False, ValidRole)
             self.deviceModel.appendRow(deviceItem)
         currentDeviceName = self.settings.value('AudioDevice')
-        if current and currentDeviceName:
-            match = self.deviceModel.match(self.deviceModel.index(0, 0), QtCore.Qt.DisplayRole, currentDeviceName, flags=QtCore.Qt.MatchExactly)
-            if not match:
-                self.deviceList.setCurrentIndex(current.index())
+        if current:
+            if currentDeviceName:
+                match = self.deviceModel.match(self.deviceModel.index(0, 0), QtCore.Qt.DisplayRole, currentDeviceName, flags=QtCore.Qt.MatchExactly)
+                if not match:
+                    self.deviceList.setCurrentIndex(current.index())
+                else:
+                    self.deviceList.setCurrentIndex(match[0])
             else:
-                self.deviceList.setCurrentIndex(match[0])
-        else:
-            self.deviceList.setCurrentIndex(current.index())
+                self.deviceList.setCurrentIndex(current.index())
 
     def exec_(self):
         prober = AudioDeviceProber()
