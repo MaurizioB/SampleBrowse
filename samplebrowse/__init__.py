@@ -9,10 +9,10 @@ from PyQt5 import QtCore, QtGui, QtMultimedia, QtWidgets, uic
 import soundfile
 import numpy as np
 
-from src.widgets import *
-from src.constants import *
-from src.dialogs import *
-from src.classes import *
+from samplebrowse.widgets import *
+from samplebrowse.constants import *
+from samplebrowse.dialogs import *
+from samplebrowse.classes import *
 
 class EllipsisLabel(QtWidgets.QLabel):
     def __init__(self, *args, **kwargs):

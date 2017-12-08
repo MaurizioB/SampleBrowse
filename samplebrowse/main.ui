@@ -388,12 +388,12 @@
   <customwidget>
    <class>TagsEditorTextEdit</class>
    <extends>QTextEdit</extends>
-   <header>src.widgets</header>
+   <header>samplebrowse.widgets</header>
   </customwidget>
   <customwidget>
    <class>SampleView</class>
    <extends>QTableView</extends>
-   <header>src</header>
+   <header>samplebrowse</header>
   </customwidget>
  </customwidgets>
  <tabstops>

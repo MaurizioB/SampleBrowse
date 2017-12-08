@@ -1,5 +1,5 @@
-from PyQt5 import QtCore, QtGui, QtWidgets
-from src.constants import *
+from PyQt5 import QtCore, QtWidgets
+from samplebrowse.constants import *
 
 
 class SampleControlDelegate(QtWidgets.QStyledItemDelegate):
