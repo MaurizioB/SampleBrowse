@@ -7,8 +7,21 @@ from src import utils
 from src.constants import *
 from src.widgets import TagsEditorTextEdit, AlignItemDelegate, TagListDelegate, SubtypeDelegate, ColorLineEdit
 from src.classes import SampleSortFilterProxyModel, Crawler
-
+from src.info import __version__
 audioDevice = namedtuple('audioDevice', 'device name sampleRates sampleSizes channels')
+
+
+class AboutDialog(QtWidgets.QMessageBox):
+    def __init__(self, parent):
+        QtWidgets.QMessageBox.__init__(
+            self, 
+            QtWidgets.QMessageBox.Information, 
+            'About SampleBrowse', 
+            '''
+            <h2>SampleBrowse</h2>
+            Version: {version}
+            '''.format(version=__version__), 
+            parent=parent)
 
 
 class AudioDeviceProber(QtCore.QObject):
@@ -309,11 +322,9 @@ class ImportDialog(QtWidgets.QDialog):
             setCheckedAction.setEnabled(False)
             unsetCheckedAction.setEnabled(False)
             editTagsAction.setEnabled(False)
-        sep = QtWidgets.QAction(menu)
-        sep.setSeparator(True)
         selectAllAction = QtWidgets.QAction('Select all', menu)
 
-        menu.addActions([setCheckedAction, unsetCheckedAction, editTagsAction, sep, selectAllAction])
+        menu.addActions([setCheckedAction, unsetCheckedAction, editTagsAction, utils.menuSeparator(menu), selectAllAction])
         res = menu.exec_(self.sampleView.viewport().mapToGlobal(pos))
         if res == selectAllAction:
             self.sampleView.selectAll()

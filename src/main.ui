@@ -15,7 +15,16 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout" rowstretch="0,100,0">
-    <property name="margin">
+    <property name="leftMargin">
+     <number>4</number>
+    </property>
+    <property name="topMargin">
+     <number>4</number>
+    </property>
+    <property name="rightMargin">
+     <number>4</number>
+    </property>
+    <property name="bottomMargin">
      <number>4</number>
     </property>
     <item row="2" column="1">
@@ -362,12 +371,12 @@
      <height>28</height>
     </rect>
    </property>
-   <widget class="QMenu" name="menuFile">
+   <widget class="QMenu" name="fileMenu">
     <property name="title">
-     <string>File</string>
+     <string>Fi&amp;le</string>
     </property>
    </widget>
-   <addaction name="menuFile"/>
+   <addaction name="fileMenu"/>
   </widget>
   <action name="actionQuit">
    <property name="text">

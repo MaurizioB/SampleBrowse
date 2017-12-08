@@ -558,10 +558,20 @@ class SampleBrowse(QtWidgets.QMainWindow):
         quitAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('application-exit'), 'Quit', self)
         quitAction.setMenuRole(QtWidgets.QAction.QuitRole)
         quitAction.triggered.connect(self.quit)
+        self.fileMenu.addActions([quitAction])
+
+        rightMenuBar = QtWidgets.QMenuBar(self.menubar)
+        helpMenu = QtWidgets.QMenu('&?', self.menubar)
+        rightMenuBar.addMenu(helpMenu)
+        self.menubar.setCornerWidget(rightMenuBar)
+
         settingsAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('preferences-desktop-multimedia'), 'Audio settings...', self)
         settingsAction.setMenuRole(QtWidgets.QAction.PreferencesRole)
         settingsAction.triggered.connect(self.showAudioSettings)
-        self.menuFile.addActions([settingsAction, quitAction])
+        aboutAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('help-about'), 'About...', self)
+        aboutAction.setMenuRole(QtWidgets.QAction.AboutRole)
+        aboutAction.triggered.connect(AboutDialog(self).exec_)
+        helpMenu.addActions([settingsAction, utils.menuSeparator(self), aboutAction])
 
     def showAudioSettings(self):
         res = self.audioSettingsDialog.exec_()
@@ -660,11 +670,9 @@ class SampleBrowse(QtWidgets.QMainWindow):
             if dirPathItem.text() == dirPath:
                 addDirAction.setEnabled(False)
                 break
-        sep = QtWidgets.QAction(menu)
-        sep.setSeparator(True)
         scanAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('edit-find'), 'Scan "{}" for samples'.format(dirName), menu)
 
-        menu.addActions([addDirAction, sep, scanAction])
+        menu.addActions([addDirAction, utils.menuSeparator(menu), scanAction])
         res = menu.exec_(self.fsView.mapToGlobal(pos))
         if res == addDirAction:
             dirLabelItem = QtGui.QStandardItem(dirIndex.data())
@@ -738,10 +746,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
         dirPath = dirPathIndex.data()
         menu = QtWidgets.QMenu()
         scrollToAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('folder'), 'Show directory in tree', menu)
-        sep = QtWidgets.QAction(menu)
-        sep.setSeparator(True)
         removeAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('edit-delete'), 'Remove from favourites', menu)
-        menu.addActions([scrollToAction, sep, removeAction])
+        menu.addActions([scrollToAction, utils.menuSeparator(menu), removeAction])
         res = menu.exec_(self.favouritesTable.viewport().mapToGlobal(event.pos()))
         if res == scrollToAction:
             self.fsView.setCurrentIndex(self.fsProxyModel.mapFromSource(self.fsModel.index(dirPath)))
@@ -884,9 +890,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             menu.addActions([addAllAction, addAllActionWithTags])
         if exist:
             if new:
-                sep = QtWidgets.QAction(menu)
-                sep.setSeparator(True)
-                menu.addAction(sep)
+                menu.addAction(utils.menuSeparator(menu))
             menu.addAction(removeAllAction)
         res = menu.exec_(self.sampleView.viewport().mapToGlobal(pos))
         if res == addAllAction:
