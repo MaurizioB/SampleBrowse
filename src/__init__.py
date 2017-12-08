@@ -4,7 +4,7 @@
 import sys
 import os
 import sqlite3
-from math import log
+#from math import log
 from PyQt5 import QtCore, QtGui, QtMultimedia, QtWidgets, uic
 import soundfile
 import numpy as np
@@ -204,11 +204,33 @@ class Player(QtCore.QObject):
     stopped = QtCore.pyqtSignal()
     paused = QtCore.pyqtSignal()
 
-    def __init__(self, main, audioDevice=None):
+    def __init__(self, main, audioDeviceName=None):
         QtCore.QObject.__init__(self)
         self.main = main
+        self.audioBufferArray = QtCore.QBuffer(self)
+        self.output = None
+        self.audioDevice = None
+        self.setAudioDeviceByName(audioDeviceName)
+        self.setAudioDevice()
 
-        self.audioDevice = audioDevice if audioDevice else QtMultimedia.QAudioDeviceInfo.defaultOutputDevice()
+    def setAudioDeviceByName(self, audioDeviceName):
+        defaultDevice = QtMultimedia.QAudioDeviceInfo.defaultOutputDevice()
+        if not audioDeviceName:
+            self.audioDevice = defaultDevice
+        elif audioDeviceName == defaultDevice:
+            self.audioDevice = defaultDevice
+        else:
+            for sysDevice in QtMultimedia.QAudioDeviceInfo.availableDevices(QtMultimedia.QAudio.AudioOutput):
+                if sysDevice.deviceName() == audioDeviceName:
+                    break
+            else:
+                sysDevice = defaultDevice
+            self.audioDevice = sysDevice
+#        self.audioDeviceName = audioDeviceName if audioDeviceName else QtMultimedia.QaudioDeviceInfo.defaultOutputDevice()
+
+    def setAudioDevice(self, audioDevice=None):
+        if audioDevice:
+            self.audioDevice = audioDevice
         sampleSize = 32 if 32 in self.audioDevice.supportedSampleSizes() else 16
         sampleRate = 48000 if 48000 in self.audioDevice.supportedSampleRates() else 44100
 
@@ -222,17 +244,13 @@ class Player(QtCore.QObject):
 
         if not self.audioDevice.isFormatSupported(format):
             format = self.audioDevice.nearestFormat(format)
-            #do something with self.audioDevice.nearestFormat(format)
+            #do something else with self.audioDevice.nearestFormat(format)?
         self.sampleSize = format.sampleSize()
         self.sampleRate = format.sampleRate()
-        self.output = QtMultimedia.QAudioOutput(format)
+        self.output = QtMultimedia.QAudioOutput(self.audioDevice, format)
         self.output.setNotifyInterval(50)
         self.output.stateChanged.connect(self.stateChanged)
         self.output.notify.connect(self.notify)
-#        self.dtype = 'float32' if self.sampleSize >= 32 else 'int16'
-
-#        self.audioQueue = Queue()
-        self.audioBufferArray = QtCore.QBuffer(self)
 
     def isPlaying(self):
         return True if self.output.state() == QtMultimedia.QAudio.ActiveState else False
@@ -368,8 +386,9 @@ class SampleBrowse(QtWidgets.QMainWindow):
     def __init__(self):
         QtWidgets.QMainWindow.__init__(self)
         uic.loadUi('{}/main.ui'.format(os.path.dirname(constants.__file__)), self)
+        self.audioSettingsDialog = AudioSettingsDialog(self)
         self.settings = QtCore.QSettings()
-        self.player = Player(self)
+        self.player = Player(self, self.settings.value('AudioDevice'))
         self.player.stopped.connect(self.stopped)
         self.player.output.notify.connect(self.movePlayhead)
         self.sampleSize = self.player.sampleSize
@@ -532,6 +551,28 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
         self.reloadTags()
         self.dbTreeView.expandToDepth(0)
+
+        self.doMenu()
+
+    def doMenu(self):
+        quitAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('application-exit'), 'Quit', self)
+        quitAction.setMenuRole(QtWidgets.QAction.QuitRole)
+        quitAction.triggered.connect(self.quit)
+        settingsAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('preferences-desktop-multimedia'), 'Audio settings...', self)
+        settingsAction.setMenuRole(QtWidgets.QAction.PreferencesRole)
+        settingsAction.triggered.connect(self.showAudioSettings)
+        self.menuFile.addActions([settingsAction, quitAction])
+
+    def showAudioSettings(self):
+        res = self.audioSettingsDialog.exec_()
+        if not res:
+            return
+        self.player.setAudioDevice(res)
+
+    def quit(self):
+        self.dbConn.commit()
+        self.dbConn.close()
+        QtWidgets.QApplication.quit()
 
     def loadDb(self):
         dataDir = QtCore.QDir(QtCore.QStandardPaths.standardLocations(QtCore.QStandardPaths.AppDataLocation)[0])

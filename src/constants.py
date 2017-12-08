@@ -23,6 +23,17 @@ subtypesDict = {
     'PCM_24': '24',
     }
 
+channelsLabels = {
+    1: 'Mono', 
+    2: 'Stereo', 
+    3: 'Stereo + Central/Rear', 
+    4: 'Quad/Surround', 
+    5: 'Surround + Center', 
+    6: '5.1', 
+    7: '3 Front + 3 Rear + Sub', 
+    8: '7.1'
+    }
+
 fileNameColumn, dirColumn, lengthColumn, formatColumn, rateColumn, channelsColumn, subtypeColumn, tagsColumn, previewColumn = range(9)
 allColumns = fileNameColumn, dirColumn, lengthColumn, formatColumn, rateColumn, channelsColumn, subtypeColumn, tagsColumn, previewColumn
 _visibleColumns = fileNameColumn, lengthColumn, formatColumn, rateColumn, channelsColumn, subtypeColumn
@@ -36,7 +47,11 @@ dbColumns.update({
     })
 sampleViewColumns = browseColumns, dbColumns
 
-FormatRole = QtCore.Qt.UserRole + 1
+DeviceRole = QtCore.Qt.UserRole + 1
+SampleRateRole = DeviceRole + 1
+SampleSizeRole = SampleRateRole + 1
+ChannelsRole = SampleSizeRole + 1
+FormatRole = ChannelsRole + 1
 HoverRole = FormatRole + 1
 FilePathRole = HoverRole + 1
 InfoRole = FilePathRole + 1
