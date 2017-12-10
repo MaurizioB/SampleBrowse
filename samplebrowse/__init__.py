@@ -323,6 +323,7 @@ class Player(QtCore.QObject):
 
 
 class SampleView(QtWidgets.QTableView):
+    fileUnreadable = QtCore.pyqtSignal(object, bool)
     def viewportEvent(self, event):
         if event.type() == QtCore.QEvent.ToolTip:
             index = self.indexAt(event.pos())
@@ -341,6 +342,7 @@ class SampleView(QtWidgets.QTableView):
                 try:
                     if not info:
                         info = soundfile.info(filePath)
+                    self.fileUnreadable.emit(fileIndex, True)
                     self.setToolTip('''
                         <h3>{fileName}</h3>
                         <table>
@@ -379,6 +381,7 @@ class SampleView(QtWidgets.QTableView):
                         )
                 except:
                     self.setToolTip('<h3>{}</h3>(file not available or unreadable)'.format(fileName))
+                    self.fileUnreadable.emit(fileIndex, False)
             else:
                 self.setToolTip('')
                 QtWidgets.QToolTip.showText(event.pos(), '')
@@ -513,6 +516,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.sampleView.setItemDelegateForColumn(0, self.sampleControlDelegate)
         self.sampleView.keyPressEvent = self.sampleViewKeyPressEvent
         self.sampleView.customContextMenuRequested.connect(self.sampleContextMenu)
+        self.sampleView.fileUnreadable.connect(self.setIndexReadable)
 
         self.waveScene = WaveScene()
         self.waveView.setScene(self.waveScene)
@@ -779,6 +783,12 @@ class SampleBrowse(QtWidgets.QMainWindow):
     def dirChanged(self, index):
         self.browse(self.fsModel.filePath(self.fsProxyModel.mapToSource(index)))
 
+    def setIndexReadable(self, fileIndex, readable):
+        if not fileIndex.column() == 0:
+            fileIndex = fileIndex.sibling(fileIndex.row(), 0)
+        model = fileIndex.model()
+        item = model.itemFromIndex(fileIndex)
+        utils.setItalic(item, not readable)
     
     def browse(self, path=None):
         if path is None:
@@ -1199,8 +1209,10 @@ class SampleBrowse(QtWidgets.QMainWindow):
         #might want to launch it in a separated thread or something else whenever a database will be added?
         if not self.setCurrentWave(fileIndex):
             #file not available or not readable... do something!
+            self.setIndexReadable(fileIndex, False)
             self.audioInfoTabWidget.clear()
             return
+        self.setIndexReadable(fileIndex, True)
         fileItem = self.sampleView.model().itemFromIndex(fileIndex)
         info = fileIndex.data(InfoRole)
         waveData = fileItem.data(WaveRole)
