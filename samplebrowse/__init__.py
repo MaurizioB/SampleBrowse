@@ -338,44 +338,47 @@ class SampleView(QtWidgets.QTableView):
                     tagsText = '<br/><h4>Tags:</h4><ul><li>{}</li></ul>'.format('</li><li>'.join(tags))
                 else:
                     tagsText = ''
-                if not info:
-                    info = soundfile.info(filePath)
-                self.setToolTip('''
-                    <h3>{fileName}</h3>
-                    <table>
-                        <tr>
-                            <td>Path:</td>
-                            <td>{dir}</td>
-                        </tr>
-                        <tr>
-                            <td>Length:</td>
-                            <td>{length:.03f}</td>
-                        </tr>
-                        <tr>
-                            <td>Format:</td>
-                            <td>{format} ({subtype})</td>
-                        </tr>
-                        <tr>
-                            <td>Sample rate:</td>
-                            <td>{sampleRate}</td>
-                        </tr>
-                        <tr>
-                            <td>Channels:</td>
-                            <td>{channels}</td>
-                        </tr>
-                    </table>
-                    {tags}
-                    '''.format(
-                        fileName=fileName, 
-                        dir=dir, 
-                        length=float(info.frames) / info.samplerate, 
-                        format=info.format, 
-                        sampleRate=info.samplerate, 
-                        channels=info.channels, 
-                        subtype=subtypesDict.get(info.subtype, info.subtype), 
-                        tags=tagsText, 
+                try:
+                    if not info:
+                        info = soundfile.info(filePath)
+                    self.setToolTip('''
+                        <h3>{fileName}</h3>
+                        <table>
+                            <tr>
+                                <td>Path:</td>
+                                <td>{dir}</td>
+                            </tr>
+                            <tr>
+                                <td>Length:</td>
+                                <td>{length:.03f}</td>
+                            </tr>
+                            <tr>
+                                <td>Format:</td>
+                                <td>{format} ({subtype})</td>
+                            </tr>
+                            <tr>
+                                <td>Sample rate:</td>
+                                <td>{sampleRate}</td>
+                            </tr>
+                            <tr>
+                                <td>Channels:</td>
+                                <td>{channels}</td>
+                            </tr>
+                        </table>
+                        {tags}
+                        '''.format(
+                            fileName=fileName, 
+                            dir=dir, 
+                            length=float(info.frames) / info.samplerate, 
+                            format=info.format, 
+                            sampleRate=info.samplerate, 
+                            channels=info.channels, 
+                            subtype=subtypesDict.get(info.subtype, info.subtype), 
+                            tags=tagsText, 
+                            )
                         )
-                    )
+                except:
+                    self.setToolTip('<h3>{}</h3>(file not available or unreadable)'.format(fileName))
             else:
                 self.setToolTip('')
                 QtWidgets.QToolTip.showText(event.pos(), '')
@@ -1196,6 +1199,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         #might want to launch it in a separated thread or something else whenever a database will be added?
         if not self.setCurrentWave(fileIndex):
             #file not available or not readable... do something!
+            self.audioInfoTabWidget.clear()
             return
         fileItem = self.sampleView.model().itemFromIndex(fileIndex)
         info = fileIndex.data(InfoRole)
