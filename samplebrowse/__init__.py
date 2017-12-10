@@ -1200,7 +1200,6 @@ class SampleBrowse(QtWidgets.QMainWindow):
         fileItem = self.sampleView.model().itemFromIndex(fileIndex)
         info = fileIndex.data(InfoRole)
         waveData = fileItem.data(WaveRole)
-#        waveData = waveData * self.volumeSpin.value()/100.
         self.waveScene.movePlayhead(0)
         self.player.play(waveData, info)
         fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-stop'))
@@ -1216,7 +1215,6 @@ class SampleBrowse(QtWidgets.QMainWindow):
             model = self.currentSampleIndex.model()
             model.itemFromIndex(self.currentSampleIndex).setData(QtGui.QIcon.fromTheme('media-playback-start'), QtCore.Qt.DecorationRole)
             self.currentSampleIndex = None
-#            self.waveScene.movePlayhead(-50)
 
     def getWaveData(self, filePath):
         try:
