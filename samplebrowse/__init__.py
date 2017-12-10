@@ -385,7 +385,7 @@ class SampleView(QtWidgets.QTableView):
 class SampleBrowse(QtWidgets.QMainWindow):
     def __init__(self):
         QtWidgets.QMainWindow.__init__(self)
-        uic.loadUi('{}/main.ui'.format(os.path.dirname(constants.__file__)), self)
+        uic.loadUi('{}/main.ui'.format(os.path.dirname(constants.__file__)), self, package='samplebrowse.widgets', resource_suffix='')
         self.audioSettingsDialog = AudioSettingsDialog(self)
         self.settings = QtCore.QSettings()
         self.player = Player(self, self.settings.value('AudioDevice'))
@@ -477,7 +477,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.dbDirView.header().setStretchLastSection(False)
         self.dbDirView.resizeColumnToContents(1)
         #TODO: wtf?!
-#        self.dbDirView.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        self.dbDirView.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
 #        self.dbDirView.header().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
 
         self.dbSplitter.setStretchFactor(0, 50)
@@ -531,8 +531,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.searchEdit.textChanged.connect(self.searchDb)
         filterLayout.addWidget(self.searchEdit)
 
-        self.tagsEdit.applyMode = True
-        self.tagsEdit.tagsApplied.connect(self.tagsApplied)
+        self.audioInfoTabWidget.tagsApplied.connect(self.tagsApplied)
 
         self.currentSampleIndex = None
         self.currentShownSampleIndex = None
@@ -546,7 +545,6 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.mainSplitter.setStretchFactor(0, 8)
         self.mainSplitter.setStretchFactor(1, 16)
 
-        self.infoTabWidget.setTabEnabled(1, False)
         self.shown = False
 
         self.reloadTags()
@@ -1196,7 +1194,9 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.currentSampleIndex = fileIndex
         #setCurrentWave also loads waveData
         #might want to launch it in a separated thread or something else whenever a database will be added?
-        self.setCurrentWave(fileIndex)
+        if not self.setCurrentWave(fileIndex):
+            #file not available or not readable... do something!
+            return
         fileItem = self.sampleView.model().itemFromIndex(fileIndex)
         info = fileIndex.data(InfoRole)
         waveData = fileItem.data(WaveRole)
@@ -1219,9 +1219,12 @@ class SampleBrowse(QtWidgets.QMainWindow):
 #            self.waveScene.movePlayhead(-50)
 
     def getWaveData(self, filePath):
-        with soundfile.SoundFile(filePath) as sf:
-            waveData = sf.read(always_2d=True, dtype='float32')
-        return waveData
+        try:
+            with soundfile.SoundFile(filePath) as sf:
+                waveData = sf.read(always_2d=True, dtype='float32')
+            return waveData
+        except:
+            return False
 
     def selectTagOnTree(self, tag):
         index = self.dbTreeModel.indexFromPath(tag)
@@ -1246,30 +1249,29 @@ class SampleBrowse(QtWidgets.QMainWindow):
             self.dbModel.itemFromIndex(tagsIndex).setData(tagList, TagsRole)
 
     def setCurrentWave(self, index=None):
-        self.infoTab.setEnabled(True)
-        self.infoTabWidget.setTabEnabled(1, True if self.sampleView.model() == self.dbProxyModel else False)
         if index is None:
             self.waveScene.clear()
         if self.currentShownSampleIndex and self.currentShownSampleIndex == index:
-            return
+            return True
         fileIndex = index.sibling(index.row(), 0)
         if self.player.isPlaying():
             self.play(fileIndex)
         info = fileIndex.data(InfoRole)
         if not info:
             fileItem = self.sampleView.model().itemFromIndex(fileIndex)
-            info = soundfile.info(fileItem.data(FilePathRole))
-            fileItem.setData(info, InfoRole)
-        self.infoFileNameLbl.setText(fileIndex.data())
-        self.infoLengthLbl.setText('{:.3f}'.format(float(info.frames) / info.samplerate))
-        self.infoFormatLbl.setText(info.format)
-        self.infoSampleRateLbl.setText(str(info.samplerate))
-        self.infoChannelsLbl.setText(str(info.channels))
-
+            try:
+                info = soundfile.info(fileItem.data(FilePathRole))
+                fileItem.setData(info, InfoRole)
+            except:
+                return False
         if self.sampleView.model() == self.dbProxyModel:
+            tags = []
             tagsIndex = index.sibling(index.row(), tagsColumn)
             if tagsIndex.isValid():
-                self.tagsEdit.setTags(tagsIndex.data(TagsRole))
+                tags = tagsIndex.data(TagsRole)
+        else:
+            tags = None
+        self.audioInfoTabWidget.setInfo(fileIndex.data(), info, tags)
 
         previewData = fileIndex.data(PreviewRole)
         if not previewData:
@@ -1277,6 +1279,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
             if waveData is None:
                 fileItem = self.sampleView.model().itemFromIndex(fileIndex)
                 waveData = self.getWaveData(fileItem.data(FilePathRole))
+                if not waveData.any():
+                    return False
                 fileItem.setData(waveData, WaveRole)
             ratio = 100
             if info.channels > 1:
@@ -1297,6 +1301,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.waveScene.drawWave(previewData)
         self.waveView.fitInView(self.waveScene.waveRect)
         self.currentShownSampleIndex = fileIndex
+        return True
 
     def resizeEvent(self, event):
         self.waveView.fitInView(self.waveScene.waveRect)
