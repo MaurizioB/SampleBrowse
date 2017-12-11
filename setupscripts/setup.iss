@@ -6,6 +6,21 @@
 #define MyAppExeName "SampleBrowse.exe"
 #define MyDebugAppExeName "SampleBrowseDebug.exe"
 [Code]
+var
+  deleteDb: integer;
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usAppMutexCheck then
+    if FileExists(ExpandConstant('{userappdata}\jidesk\SampleBrowse\sample.sqlite')) then 
+      begin
+        deleteDb := MsgBox('Samples database found, do you want to remove it as well?', mbConfirmation, MB_YESNO);
+      end      
+  else;
+  if (CurUninstallStep = usPostUninstall) and (deleteDb = IDYES) then begin
+    DeleteFile(ExpandConstant('{userappdata}\jidesk\SampleBrowse\sample.sqlite'))
+  end;
+
+end;
 function GetUninstallString: string;
 var
   sUnInstPath: string;
@@ -77,6 +92,7 @@ Name: "{app}\__pycache__"; Permissions: users-modify
 ;remember to change the soundfile.cpython pyc version number, if needed
 Source: "build\exe.win32-3.5\SampleBrowse.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\exe.win32-3.5\*"; DestDir: "{app}"; Excludes: "PyQt5\Qt\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "build\exe.win32-3.5\PyQt5\Qt\plugins\audio\*"; DestDir: "{app}\PyQt5\Qt\plugins\audio"; Flags: ignoreversion recursesubdirs createallsubdirs
 ;These are needed since python tries to create an optimized cache of scripts.
 Source: "setupscripts\emptyfile"; DestDir: "{app}"; DestName: "lextab.py"; Permissions: users-modify; Flags: ignoreversion
 Source: "setupscripts\emptyfile"; DestDir: "{app}"; DestName: "yacctab.py"; Permissions: users-modify; Flags: ignoreversion
