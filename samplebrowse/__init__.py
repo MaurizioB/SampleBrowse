@@ -883,7 +883,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
     def multiSampleContextMenu(self, pos):
         new = []
         exist = []
-        for fileIndex in self.sampleView.selectionModel().selectedRows():
+        fileIndexList = self.sampleView.selectionModel().selectedRows()
+        for fileIndex in fileIndexList:
             filePath = fileIndex.data(FilePathRole)
             self.sampleDb.execute('SELECT * FROM samples WHERE filePath=?', (filePath, ))
             if not self.sampleDb.fetchone():
@@ -892,8 +893,10 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 exist.append(fileIndex)
         menu = QtWidgets.QMenu()
         if self.sampleView.model() == self.browseModel:
+            editTagsAction = None
             removeAllAction = QtWidgets.QAction('Remove {} existing samples from database'.format(len(exist)), menu)
         else:
+            editTagsAction = QtWidgets.QAction('Edit tags for selected samples...', menu)
             removeAllAction = QtWidgets.QAction('Remove selected samples from database', menu)
         addAllAction = QtWidgets.QAction('Add selected samples to database', menu)
         addAllActionWithTags = QtWidgets.QAction('Add selected samples to database with tags...', menu)
@@ -902,6 +905,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
         if exist:
             if new:
                 menu.addAction(utils.menuSeparator(menu))
+            if editTagsAction:
+                menu.addAction(editTagsAction)
             menu.addAction(removeAllAction)
         res = menu.exec_(self.sampleView.viewport().mapToGlobal(pos))
         if res == addAllAction:
@@ -910,6 +915,35 @@ class SampleBrowse(QtWidgets.QMainWindow):
             tags = AddSamplesWithTagDialog(self, new).exec_()
             if isinstance(tags, str):
                 self.addSampleGroupToDb(new, tags)
+        elif res == editTagsAction:
+            indexes = []
+            fileList = []
+            tags = set()
+            for fileIndex in fileIndexList:
+                filePath = fileIndex.data(FilePathRole)
+                fileList.append(filePath)
+                tagsIndex = fileIndex.sibling(fileIndex.row(), tagsColumn)
+                indexes.append(tagsIndex)
+                self.sampleDb.execute('SELECT tags FROM samples WHERE filePath=?', (filePath, ))
+                tagList = list(filter(None, self.sampleDb.fetchone()[0].split(',')))
+                if tagList:
+                    tags.add(tuple(tagList))
+            uncommon = False
+            if not tags:
+                tags = []
+            elif len(tags) == 1:
+                tags = list(tags)[0]
+            else:
+                tags = sorted(set(tag for tagList in tags for tag in tagList))
+                uncommon = True
+            res = TagsEditorDialog(self, tags, uncommon=uncommon).exec_()
+            if not isinstance(res, list):
+                return
+            for filePath, index in zip(fileList, indexes):
+                self.sampleView.model().setData(index, res, TagsRole)
+                self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (','.join(res), filePath))
+            self.reloadTags()
+            self.dbConn.commit()
         elif res == removeAllAction:
             if RemoveSamplesDialog(self, exist).exec_():
                 fileNames = [i.data(FilePathRole) for i in exist]
@@ -1293,7 +1327,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             if waveData is None:
                 fileItem = self.sampleView.model().itemFromIndex(fileIndex)
                 waveData = self.getWaveData(fileItem.data(FilePathRole))
-                if not waveData.any():
+                if not len(waveData):
                     return False
                 fileItem.setData(waveData, WaveRole)
             ratio = 100
