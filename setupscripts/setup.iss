@@ -1,7 +1,6 @@
 #define MyAppName "SampleBrowse"
 #define MyAppID "{742E8233-76A6-4D70-BF1C-07CDC07659AD}"
-#define MyAppVersion "0.5.3"
-;#define MyAppVersion GetFileVersion("F:\build\exe.win32-3.5\SampleBrowse.exe")
+#define MyAppVersion GetFileVersion(AddBackslash(SourcePath) + "..\build\exe.win32-3.5\SampleBrowse.exe")
 #define MyAppPublisher "jidesk"
 #define MyAppURL "http://jidesk.net/"
 #define MyAppExeName "SampleBrowse.exe"
@@ -79,8 +78,8 @@ Name: "{app}\__pycache__"; Permissions: users-modify
 Source: "build\exe.win32-3.5\SampleBrowse.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\exe.win32-3.5\*"; DestDir: "{app}"; Excludes: "PyQt5\Qt\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 ;These are needed since python tries to create an optimized cache of scripts.
-Source: "setupscripts\emptyfile"; DestDir: "{app}"; DestName: "lextab.py"; Permissions: users-modify
-Source: "setupscripts\emptyfile"; DestDir: "{app}"; DestName: "yacctab.py"; Permissions: users-modify
+Source: "setupscripts\emptyfile"; DestDir: "{app}"; DestName: "lextab.py"; Permissions: users-modify; Flags: ignoreversion
+Source: "setupscripts\emptyfile"; DestDir: "{app}"; DestName: "yacctab.py"; Permissions: users-modify; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
