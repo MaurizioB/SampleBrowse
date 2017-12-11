@@ -1,7 +1,7 @@
 from PyQt5 import QtCore, QtWidgets
-from samplebrowse.constants import *
-from samplebrowse.dialogs import ImportDialogScanDnD, SampleScanDialog
-from samplebrowse.widgets import *
+from samplebrowsesrc.constants import *
+from samplebrowsesrc.dialogs import ImportDialogScanDnD, SampleScanDialog
+from samplebrowsesrc.widgets import *
 
 class DropTimer(QtCore.QTimer):
     expandIndex = QtCore.pyqtSignal(object)

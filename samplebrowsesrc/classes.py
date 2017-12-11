@@ -1,7 +1,7 @@
 from threading import Event
 import soundfile
 from PyQt5 import QtCore, QtGui
-from samplebrowse.constants import *
+from samplebrowsesrc.constants import *
 
 
 class DbDirModel(QtGui.QStandardItemModel):

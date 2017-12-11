@@ -123,7 +123,7 @@
   <customwidget>
    <class>AudioDevicesListView</class>
    <extends>QListView</extends>
-   <header>samplebrowse.dialogs</header>
+   <header>samplebrowsesrc.dialogs</header>
   </customwidget>
  </customwidgets>
  <resources/>

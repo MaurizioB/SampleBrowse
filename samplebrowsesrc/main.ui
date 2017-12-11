@@ -202,7 +202,7 @@
      </widget>
     </item>
     <item row="2" column="0">
-     <widget class="AudioInfoTabWidget" name="audioInfoTabWidget"/>
+     <widget class="AudioInfoTabWidget" name="audioInfoTabWidget" native="true"/>
     </item>
    </layout>
   </widget>
@@ -239,7 +239,7 @@
   <customwidget>
    <class>SampleView</class>
    <extends>QTableView</extends>
-   <header>samplebrowse</header>
+   <header>samplebrowsesrc</header>
   </customwidget>
  </customwidgets>
  <tabstops>

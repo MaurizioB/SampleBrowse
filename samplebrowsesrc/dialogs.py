@@ -3,12 +3,12 @@ import soundfile
 from collections import namedtuple
 from PyQt5 import QtCore, QtGui, QtWidgets, QtMultimedia, uic
 
-from samplebrowse import utils
-from samplebrowse.constants import *
-from samplebrowse.widgets.colorlineedit import ColorLineEdit
-from samplebrowse.widgets import TagsEditorTextEdit, AlignItemDelegate, TagListDelegate, SubtypeDelegate
-from samplebrowse.classes import SampleSortFilterProxyModel, Crawler
-from samplebrowse.info import __version__
+from samplebrowsesrc import utils
+from samplebrowsesrc.constants import *
+from samplebrowsesrc.widgets.colorlineedit import ColorLineEdit
+from samplebrowsesrc.widgets import TagsEditorTextEdit, AlignItemDelegate, TagListDelegate, SubtypeDelegate
+from samplebrowsesrc.classes import SampleSortFilterProxyModel, Crawler
+from samplebrowsesrc.info import __version__
 audioDevice = namedtuple('audioDevice', 'device name sampleRates sampleSizes channels')
 
 

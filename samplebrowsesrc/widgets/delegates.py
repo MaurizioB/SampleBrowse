@@ -1,5 +1,5 @@
 from PyQt5 import QtCore, QtWidgets
-from samplebrowse.constants import *
+from samplebrowsesrc.constants import *
 
 
 class SampleControlDelegate(QtWidgets.QStyledItemDelegate):
