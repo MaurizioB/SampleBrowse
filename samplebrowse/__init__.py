@@ -9,6 +9,7 @@ from PyQt5 import QtCore, QtGui, QtMultimedia, QtWidgets, uic
 import soundfile
 import numpy as np
 
+import samplebrowse.icons
 from samplebrowse.widgets import *
 from samplebrowse.constants import *
 from samplebrowse.dialogs import *
@@ -392,6 +393,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
     def __init__(self):
         QtWidgets.QMainWindow.__init__(self)
         uic.loadUi('{}/main.ui'.format(os.path.dirname(constants.__file__)), self, package='samplebrowse.widgets', resource_suffix='')
+        if not QtGui.QIcon.themeName():
+            QtGui.QIcon.setThemeName('TangoCustom')
         self.audioSettingsDialog = AudioSettingsDialog(self)
         self.settings = QtCore.QSettings()
         self.player = Player(self, self.settings.value('AudioDevice'))
