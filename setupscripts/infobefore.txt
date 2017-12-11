@@ -1,0 +1,5 @@
+Welcome to the setup procedure for SampleBrowse.
+
+This one of the earliest releases, SampleBrowse is in beta stage and might not work at all.
+
+If you find some bugs or think that SampleBrowse behaves in a "wrong" way, please visit the GitHub project page at https://github.com/MaurizioB/SampleBrowse (a shortcut to it will be available in the Start menu, if created).
