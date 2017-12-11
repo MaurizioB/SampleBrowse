@@ -16,8 +16,8 @@ import sys
 base = 'Win32GUI' if sys.platform=='win32' else None
 #print(os.path.join(parent, 'setupscripts/icons/icon.ico'))
 executables = [
-    Executable(script='samplebrowsesrc.py', base=base, icon='setupscripts/icons/icon.ico'),
-    Executable(script='samplebrowsesrc.py', targetName='samplebrowsesrcDebug.exe', base=None, icon='setupscripts/icons/icon.ico')
+    Executable(script='SampleBrowse.py', base=base, icon='setupscripts/icons/icon.ico'),
+    Executable(script='SampleBrowse.py', targetName='SampleBrowseDebug.exe', base=None, icon='setupscripts/icons/icon.ico')
 ]
 
 setup(name='samplebrowsesrc',
