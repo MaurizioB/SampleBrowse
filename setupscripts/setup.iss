@@ -5,6 +5,7 @@
 #define MyAppPublisher "jidesk"
 #define MyAppURL "http://jidesk.net/"
 #define MyAppExeName "SampleBrowse.exe"
+#define MyDebugAppExeName "SampleBrowseDebug.exe"
 [Code]
 function GetUninstallString: string;
 var
@@ -83,6 +84,7 @@ Source: "setupscripts\emptyfile"; DestDir: "{app}"; DestName: "yacctab.py"; Perm
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName} (debug mode)"; Filename: "{app}\{#MyDebugAppExeName}"
 Name: "{group}\Project website"; Filename: "https://github.com/MaurizioB/Bigglesworth"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
