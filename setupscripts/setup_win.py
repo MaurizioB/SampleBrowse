@@ -14,10 +14,11 @@ macbuildOptions = {}
 
 import sys
 base = 'Win32GUI' if sys.platform=='win32' else None
-
+#print(os.path.join(parent, 'setupscripts/icons/icon.ico'))
 executables = [
-    Executable('SampleBrowse.py', base=base, icon=os.path.join(parent, 'setupscripts/icons/icon.ico'))
+    Executable(script='SampleBrowse.py', base=base, icon='setupscripts/icons/icon.ico')
 ]
+
 setup(name='SampleBrowse',
       version = '0.5.5',
       description = 'Audio sample browser and database',
