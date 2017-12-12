@@ -476,8 +476,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.dbProxyModel.setSourceModel(self.dbModel)
         self.sampleView.setModel(self.browseModel)
         self.alignCenterDelegate = AlignItemDelegate(QtCore.Qt.AlignCenter)
-        self.alignLeftElideMidDelegate = AlignItemDelegate(QtCore.Qt.AlignLeft, QtCore.Qt.ElideMiddle)
-        self.sampleView.setItemDelegateForColumn(1, self.alignLeftElideMidDelegate)
+        self.filePathDelegate = FilePathDelegate(QtCore.Qt.AlignLeft, QtCore.Qt.ElideMiddle)
+        self.sampleView.setItemDelegateForColumn(1, self.filePathDelegate)
         for c in range(2, subtypeColumn + 1):
             self.sampleView.setItemDelegateForColumn(c, self.alignCenterDelegate)
         self.subtypeDelegate = SubtypeDelegate()

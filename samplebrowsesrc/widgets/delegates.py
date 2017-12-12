@@ -82,6 +82,10 @@ class AlignItemDelegate(QtWidgets.QStyledItemDelegate):
         option.textElideMode = self.elideMode
         return QtWidgets.QStyledItemDelegate.paint(self, painter, option, index)
 
+class FilePathDelegate(AlignItemDelegate):
+    def paint(self, painter, option, index):
+        option.text = QtCore.QDir(option.text).toNativeSeparators()
+        return AlignItemDelegate.paint(self, painter, option, index)
 
 class TagListDelegate(QtWidgets.QStyledItemDelegate):
     tagSelected = QtCore.pyqtSignal(str)
