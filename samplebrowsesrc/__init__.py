@@ -883,9 +883,9 @@ class SampleBrowse(QtWidgets.QMainWindow):
             editTagsAction = QtWidgets.QAction('Edit tags for selected samples...', menu)
             removeAllAction = QtWidgets.QAction('Remove selected samples from database', menu)
         addAllAction = QtWidgets.QAction('Add selected samples to database', menu)
-        addAllActionWithTags = QtWidgets.QAction('Add selected samples to database with tags...', menu)
+        addAllWithTagsAction = QtWidgets.QAction('Add selected samples to database with tags...', menu)
         if new:
-            menu.addActions([addAllAction, addAllActionWithTags])
+            menu.addActions([addAllAction, addAllWithTagsAction])
         if exist:
             if new:
                 menu.addAction(utils.menuSeparator(menu))
@@ -895,10 +895,12 @@ class SampleBrowse(QtWidgets.QMainWindow):
         res = menu.exec_(self.sampleView.viewport().mapToGlobal(pos))
         if res == addAllAction:
             self.addSampleGroupToDb(new)
-        elif res == addAllActionWithTags:
+            self.dbDirModel.updateTree()
+        elif res == addAllWithTagsAction:
             tags = AddSamplesWithTagDialog(self, new).exec_()
             if isinstance(tags, str):
                 self.addSampleGroupToDb(new, tags)
+            self.dbDirModel.updateTree()
         elif res == editTagsAction:
             indexes = []
             fileList = []

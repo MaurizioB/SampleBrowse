@@ -19,7 +19,7 @@ class DbDirModel(QtGui.QStandardItemModel):
             filePath = data[0]
             fileInfo = QtCore.QFileInfo(filePath)
             qdir = fileInfo.absoluteDir()
-            dirTree = tuple(filter(None, qdir.absolutePath().split(qdir.separator())))
+            dirTree = tuple(filter(None, qdir.absolutePath().split('/')))
             depth = 0
             parentIndex = QtCore.QModelIndex()
             while depth < len(dirTree):
