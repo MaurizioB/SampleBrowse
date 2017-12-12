@@ -16,6 +16,7 @@ class DbDirModel(QtGui.QStandardItemModel):
 
     def updateTree(self):
         self.db.execute('SELECT filePath FROM samples')
+        root = '/' if sys.platform != 'win32' else ''
         for data in self.db.fetchall():
             filePath = data[0]
             fileInfo = QtCore.QFileInfo(filePath)
@@ -23,14 +24,16 @@ class DbDirModel(QtGui.QStandardItemModel):
             dirTree = tuple(filter(None, qdir.absolutePath().split('/')))
             depth = 0
             parentIndex = QtCore.QModelIndex()
+            sep = QtCore.QDir.separator()
             while depth < len(dirTree):
-                subdir = '{}/'.format(dirTree[depth])
-                if depth == 0 and sys.platform != 'win32':
-                    subdir = '/{}'.format(subdir)
-                dirMatch = self.match(self.index(0, 0, parentIndex), QtCore.Qt.DisplayRole, subdir, flags=QtCore.Qt.MatchExactly)
+                subdir = '{}'.format(dirTree[depth])
+                if depth == 0:
+                    subdir = '{root}{subdir}'.format(root=root, subdir=subdir)
+                dirMatch = self.match(self.index(0, 0, parentIndex), DirNameRole, subdir, flags=QtCore.Qt.MatchExactly)
                 if not dirMatch:
-                    childItem = QtGui.QStandardItem(subdir)
-                    childItem.setData('/{}'.format('/'.join(dirTree[:depth + 1])), FilePathRole)
+                    childItem = QtGui.QStandardItem('{subdir}{sep}'.format(subdir=subdir, sep=sep))
+                    childItem.setData(subdir, DirNameRole)
+                    childItem.setData('{root}{dirTree}'.format(root=root, dirTree=sep.join(dirTree[:depth + 1])), FilePathRole)
                     countItem = QtGui.QStandardItem('1')
                     try:
                         self.itemFromIndex(parentIndex).appendRow([childItem, countItem])
@@ -61,7 +64,7 @@ class DbDirModel(QtGui.QStandardItemModel):
         child = parent.child(0)
         if self.optimizeItemTree(child):
             parent.takeRow(0)
-            parent.setText('{}{}'.format(parent.text(), child.text()))
+            parent.setText('{parent}{sep}{child}'.format(parent=parent.data(DirNameRole), sep=QtCore.QDir.separator(), child=child.text()))
             parent.setData(child.data(FilePathRole), FilePathRole)
             return True
 
