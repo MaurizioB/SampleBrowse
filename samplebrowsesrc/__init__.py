@@ -1172,6 +1172,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
     
     def dbTreeViewDoubleClicked(self, index):
         if self.dbTreeProxyModel.mapToSource(index) == self.dbTreeModel.index(0, 0):
+            self.currentDbQuery = None
             self.browseDb(force=True)
             return
         #TODO this has to be implemented along with browseDb
