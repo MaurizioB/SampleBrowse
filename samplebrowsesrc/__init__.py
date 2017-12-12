@@ -476,8 +476,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.dbProxyModel.setSourceModel(self.dbModel)
         self.sampleView.setModel(self.browseModel)
         self.alignCenterDelegate = AlignItemDelegate(QtCore.Qt.AlignCenter)
-        self.filePathDelegate = FilePathDelegate(QtCore.Qt.AlignLeft, QtCore.Qt.ElideMiddle)
-        self.sampleView.setItemDelegateForColumn(1, self.filePathDelegate)
+        self.alignLeftElideMidDelegate = AlignItemDelegate(QtCore.Qt.AlignLeft, QtCore.Qt.ElideMiddle)
+        self.sampleView.setItemDelegateForColumn(1, self.alignLeftElideMidDelegate)
         for c in range(2, subtypeColumn + 1):
             self.sampleView.setItemDelegateForColumn(c, self.alignCenterDelegate)
         self.subtypeDelegate = SubtypeDelegate()
@@ -1001,7 +1001,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             filePath, fileName, length, format, sampleRate, channels, subtype, tags, data = row
             fileItem = QtGui.QStandardItem(fileName)
             fileItem.setData(filePath, FilePathRole)
-            dirItem = QtGui.QStandardItem(QtCore.QFileInfo(filePath).absolutePath())
+            dirItem = QtGui.QStandardItem(QtCore.QDir.toNativeSeparators(filePath))
             fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-start'))
             lengthItem = QtGui.QStandardItem('{:.3f}'.format(length))
             formatItem = QtGui.QStandardItem(format)
