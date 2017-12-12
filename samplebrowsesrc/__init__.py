@@ -1172,7 +1172,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
     
     def dbTreeViewDoubleClicked(self, index):
         if self.dbTreeProxyModel.mapToSource(index) == self.dbTreeModel.index(0, 0):
-            self.browseDb()
+            self.browseDb(force=True)
             return
         #TODO this has to be implemented along with browseDb
         self.dbModel.clear()
@@ -1221,7 +1221,6 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.sampleView.resizeRowsToContents()
 
     def dbDirViewSelect(self, index):
-        print(index.data(FilePathRole))
         self.browseDb(('SELECT * from samples WHERE filePath LIKE ?', ('{}%'.format(index.data(FilePathRole)), )))
 
     def addSamplesToTag(self, sampleList, newTag):

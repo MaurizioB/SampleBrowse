@@ -33,7 +33,7 @@ class DbDirModel(QtGui.QStandardItemModel):
                 if not dirMatch:
                     childItem = QtGui.QStandardItem('{subdir}{sep}'.format(subdir=subdir, sep=sep))
                     childItem.setData(subdir, DirNameRole)
-                    childItem.setData('{root}{dirTree}'.format(root=root, dirTree=sep.join(dirTree[:depth + 1])), FilePathRole)
+                    childItem.setData('{root}{dirTree}'.format(root=root, dirTree='/'.join(dirTree[:depth + 1])), FilePathRole)
                     countItem = QtGui.QStandardItem('1')
                     try:
                         self.itemFromIndex(parentIndex).appendRow([childItem, countItem])
