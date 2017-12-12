@@ -10,7 +10,7 @@ class DbDirModel(QtGui.QStandardItemModel):
     def __init__(self, db, *args, **kwargs):
         QtGui.QStandardItemModel.__init__(self, *args, **kwargs)
         self.db = db
-        self.updateTree()
+#        self.updateTree()
 #        self.rootItem = QtGui.QStandardItem('/')
 #        self.appendRow(self.rootItem)
 

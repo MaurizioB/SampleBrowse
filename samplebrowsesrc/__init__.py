@@ -464,6 +464,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             self.dbDirView.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch), 
             self.dbDirView.header().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents), 
             ] if self.dbDirModel.rowCount() else None)
+        self.dbDirModel.updateTree()
 #        self.dbDirView.resizeColumnToContents(1)
         #TODO: wtf?!
 #        self.dbDirView.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
@@ -865,6 +866,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 self.dbModel.takeRow(fileIndex.row())
             else:
                 self.sampleDbUpdated = True
+            self.dbDirModel.updateTree()
         elif res == editTagsAction:
             self.editTags(fileIndex.sibling(fileIndex.row(), tagsColumn))
 
@@ -965,6 +967,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             self._addSampleToDb(filePath, fileName, info, tags)
         self.dbConn.commit()
         self.reloadTags()
+        self.dbDirModel.updateTree()
 #        if self.sampleView.model() == self.browseModel:
 #            self.sampleDbUpdated = True
 #        else:
@@ -976,6 +979,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.reloadTags()
         if self.sampleView.model() == self.browseModel:
             self.sampleDbUpdated = True
+        self.dbDirModel.updateTree()
 #        else:
 #            reload query
 
