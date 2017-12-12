@@ -5,6 +5,7 @@ from samplebrowsesrc.constants import *
 
 
 class DbDirModel(QtGui.QStandardItemModel):
+    loaded = QtCore.pyqtSignal()
     def __init__(self, db, *args, **kwargs):
         QtGui.QStandardItemModel.__init__(self, *args, **kwargs)
         self.db = db
