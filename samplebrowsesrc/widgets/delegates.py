@@ -84,7 +84,7 @@ class AlignItemDelegate(QtWidgets.QStyledItemDelegate):
 
 class FilePathDelegate(AlignItemDelegate):
     def paint(self, painter, option, index):
-        option.text = QtCore.QDir(option.text).toNativeSeparators()
+        option.text = QtCore.QDir.toNativeSeparators(option.text)
         return AlignItemDelegate.paint(self, painter, option, index)
 
 class TagListDelegate(QtWidgets.QStyledItemDelegate):
