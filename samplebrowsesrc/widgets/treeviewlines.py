@@ -3,7 +3,6 @@ from PyQt5 import QtCore, QtWidgets
 class TreeViewWithLines(QtWidgets.QTreeView):
     def drawRow(self, painter, option, index):
         QtWidgets.QTreeView.drawRow(self, painter, option, index)
-        return
         painter.setPen(QtCore.Qt.lightGray)
         y = option.rect.y()
         painter.save()
