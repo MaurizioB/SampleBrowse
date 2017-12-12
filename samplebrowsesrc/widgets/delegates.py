@@ -1,5 +1,45 @@
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
+from samplebrowsesrc import utils
 from samplebrowsesrc.constants import *
+
+class TagTreeDelegate(QtWidgets.QStyledItemDelegate):
+    tagColorsChanged = QtCore.pyqtSignal(object, object, object)
+    startEditTag = QtCore.pyqtSignal(object)
+    removeTag = QtCore.pyqtSignal(object)
+    def editorEvent(self, event, model, _option, index):
+        if event.type() == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.RightButton:
+            if index != model.index(0, 0):
+                menu = QtWidgets.QMenu()
+                editTagAction = QtWidgets.QAction('Rename tag...', menu)
+                editColorAction = QtWidgets.QAction('Edit tag color...', menu)
+                removeTagAction = QtWidgets.QAction('Remove tag', menu)
+                menu.addActions([editTagAction, editColorAction, utils.menuSeparator(menu), removeTagAction])
+                res = menu.exec_(_option.widget.viewport().mapToGlobal(event.pos()))
+                if res == editColorAction:
+                    #TODO: Temporary fix for circular import?
+                    from samplebrowsesrc.dialogs import TagColorDialog
+                    colorDialog = TagColorDialog(_option.widget.window(), index)
+                    if colorDialog.exec_():
+                        model.setData(index, colorDialog.foregroundColor, QtCore.Qt.ForegroundRole)
+                        model.setData(index, colorDialog.backgroundColor, QtCore.Qt.BackgroundRole)
+                        self.tagColorsChanged.emit(index, colorDialog.foregroundColor, colorDialog.backgroundColor)
+                elif res == editTagAction:
+                    self.startEditTag.emit(index)
+                elif res == removeTagAction:
+                    self.removeTag.emit(index)
+                return True
+            return True
+        return QtWidgets.QStyledItemDelegate.editorEvent(self, event, model, _option, index)
+
+    def createEditor(self, parent, option, index):
+        widget = QtWidgets.QStyledItemDelegate.createEditor(self, parent, option, index)
+        widget.setValidator(QtGui.QRegExpValidator(QtCore.QRegExp(r'[^\/,]+')))
+        return widget
+
+    def setModelData(self, widget, model, index):
+        if not widget.text():
+            return
+        QtWidgets.QStyledItemDelegate.setModelData(self, widget, model, index)
 
 
 class SampleControlDelegate(QtWidgets.QStyledItemDelegate):

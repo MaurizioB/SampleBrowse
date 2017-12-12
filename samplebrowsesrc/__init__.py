@@ -33,41 +33,6 @@ class EllipsisLabel(QtWidgets.QLabel):
         QtWidgets.QLabel.setText(self, self.fontMetrics().elidedText(self._text, QtCore.Qt.ElideMiddle, self.width()))
 
 
-class TagTreeDelegate(QtWidgets.QStyledItemDelegate):
-    tagColorsChanged = QtCore.pyqtSignal(object, object, object)
-    startEditTag = QtCore.pyqtSignal(object)
-    def editorEvent(self, event, model, _option, index):
-        if event.type() == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.RightButton:
-            if index != model.index(0, 0):
-                menu = QtWidgets.QMenu()
-                editTagAction = QtWidgets.QAction('Rename tag...', menu)
-                editColorAction = QtWidgets.QAction('Edit tag color...', menu)
-                menu.addActions([editTagAction, editColorAction])
-                res = menu.exec_(_option.widget.viewport().mapToGlobal(event.pos()))
-                if res == editColorAction:
-                    colorDialog = TagColorDialog(_option.widget.window(), index)
-                    if colorDialog.exec_():
-                        model.setData(index, colorDialog.foregroundColor, QtCore.Qt.ForegroundRole)
-                        model.setData(index, colorDialog.backgroundColor, QtCore.Qt.BackgroundRole)
-                        self.tagColorsChanged.emit(index, colorDialog.foregroundColor, colorDialog.backgroundColor)
-                elif res == editTagAction:
-                    self.startEditTag.emit(index)
-                return True
-            return True
-        return QtWidgets.QStyledItemDelegate.editorEvent(self, event, model, _option, index)
-
-    def createEditor(self, parent, option, index):
-        widget = QtWidgets.QStyledItemDelegate.createEditor(self, parent, option, index)
-        widget.setValidator(QtGui.QRegExpValidator(QtCore.QRegExp(r'[^\/,]+')))
-        return widget
-
-    def setModelData(self, widget, model, index):
-        if not widget.text():
-            return
-        QtWidgets.QStyledItemDelegate.setModelData(self, widget, model, index)
-
-
-
 class WaveScene(QtWidgets.QGraphicsScene):
     _orange = QtGui.QColor()
     _orange.setNamedColor('orangered')
@@ -473,6 +438,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.tagTreeDelegate = TagTreeDelegate()
         self.tagTreeDelegate.tagColorsChanged.connect(self.saveTagColors)
         self.tagTreeDelegate.startEditTag.connect(self.renameTag)
+        self.tagTreeDelegate.removeTag.connect(self.removeTag)
         self.dbTreeView.setItemDelegateForColumn(0, self.tagTreeDelegate)
         self.dbTreeView.setEditTriggers(self.dbTreeView.NoEditTriggers)
         self.dbTreeView.header().setStretchLastSection(False)
@@ -1118,6 +1084,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 else:
                     newTags.add(tag)
             self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (','.join(sorted(newTags)), filePath))
+            self.dbConn.commit()
             sampleMatch = self.dbModel.match(self.dbModel.index(0, 0), FilePathRole, filePath, flags=QtCore.Qt.MatchExactly)
             if not sampleMatch:
                 continue
@@ -1133,6 +1100,48 @@ class SampleBrowse(QtWidgets.QMainWindow):
         else:
             self.dbTreeProxyModel.setData(index, index.data(), TagsRole)
         self.dbTreeModel.blockSignals(False)
+
+    def removeTag(self, index):
+        index = self.dbTreeProxyModel.mapToSource(index)
+        currentTag = self.dbTreeModel.pathFromIndex(index)
+        self.sampleDb.execute('SELECT filePath, tags FROM samples WHERE tags LIKE ?', ('%{}%'.format(currentTag), ))
+        files = []
+        for filePath, tags in self.sampleDb.fetchall():
+            tags = set(filter(None, tags.split(',')))
+            if currentTag in tags:
+                files.append((filePath, tags ^ set((currentTag, ))))
+            else:
+                for tag in tags:
+                    if tag.startswith(currentTag):
+                        files.append((filePath, tags ^ set((currentTag, ))))
+                        break
+        if QtWidgets.QMessageBox.question(
+            self, 
+            'Remove tag?', 
+            'Remove tag "{tag}" {children}from database?{hasFiles}'.format(
+                tag=currentTag, 
+                children='and its children ' if self.dbTreeModel.hasChildren(index) else '', 
+                hasFiles='\nThis action applies to {} files in database (they will not be removed).'.format(len(files)) if files else '', 
+                )
+            ) == QtWidgets.QMessageBox.Yes:
+                for filePath, tags in files:
+                    tags = sorted(tags)
+                    self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (','.join(tags), filePath))
+                    match = self.dbModel.match(self.dbModel.index(0, 0), FilePathRole, filePath, flags=QtCore.Qt.MatchExactly)
+                    if match:
+                        fileIndex = match[0]
+                        tagsIndex = fileIndex.sibling(fileIndex.row(), tagsColumn)
+                        self.dbModel.setData(tagsIndex, tags, TagsRole)
+                self.sampleDb.execute(
+                    'DELETE FROM tagColors WHERE tag=?', 
+                    (currentTag, )
+                    )
+                try:
+                    self.tagColorsDict.pop(currentTag)
+                except:
+                    pass
+                self.dbConn.commit()
+                self.dbTreeModel.itemFromIndex(index.parent()).takeRow(index.row())
 
     def reloadTags(self):
         self.sampleDb.execute('SELECT tags FROM samples')
