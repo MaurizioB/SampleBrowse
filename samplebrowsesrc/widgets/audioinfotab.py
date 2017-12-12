@@ -73,6 +73,7 @@ class AudioInfoTabWidget(QtWidgets.QWidget):
             self.tabWidget.setTabEnabled(1, False)
 
     def clear(self):
+        self.infoTab.setEnabled(False)
         self.infoFileNameLbl.setText('')
         self.infoLengthLbl.setText('0')
         self.infoFormatLbl.setText('NO')

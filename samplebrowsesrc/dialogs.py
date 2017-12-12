@@ -120,6 +120,11 @@ class AudioSettingsDialog(QtWidgets.QDialog):
                 self.deviceList.setCurrentIndex(current.index())
 
     def exec_(self):
+        try:
+            getattr(self, '{}Radio'.format(self.settings.value('SampleRateConversion', 'sinc_fastest'))).setChecked(True)
+        except:
+            self.sinc_fastestRadio.setChecked(True)
+
         prober = AudioDeviceProber()
         proberThread = QtCore.QThread()
         prober.moveToThread(proberThread)
@@ -136,7 +141,12 @@ class AudioSettingsDialog(QtWidgets.QDialog):
             return res
         device = self.deviceList.currentIndex().data(DeviceRole)
         self.settings.setValue('AudioDevice', device.deviceName())
-        return device
+        conversion = self.sampleRateGroup.checkedButton().objectName()[:-len('Radio')]
+        if conversion == 'sinc_fastest':
+            self.settings.remove('SampleRateConversion')
+        else:
+            self.settings.setValue('SampleRateConversion', conversion)
+        return device, conversion
 
 
 class TagColorDialog(QtWidgets.QDialog):

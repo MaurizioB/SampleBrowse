@@ -67,6 +67,7 @@ class TagTreeDelegate(QtWidgets.QStyledItemDelegate):
         QtWidgets.QStyledItemDelegate.setModelData(self, widget, model, index)
 
 
+
 class WaveScene(QtWidgets.QGraphicsScene):
     _orange = QtGui.QColor()
     _orange.setNamedColor('orangered')
@@ -115,7 +116,7 @@ class WaveScene(QtWidgets.QGraphicsScene):
         path.lineTo(pos, 0)
         path.closeSubpath()
         leftPath = self.addPath(path, self.wavePen, self.waveBrush)
-        leftLine = self.addLine(0, 0, leftPath.boundingRect().width(), 0, self.zeroPen)
+        leftLine = self.addLine(0, .5, leftPath.boundingRect().width(), .5, self.zeroPen)
         leftLine.setFlags(leftLine.flags() ^ leftLine.ItemIgnoresTransformations)
         if not right:
             self.waveRect = QtCore.QRectF(0, -1, leftPath.boundingRect().width(), 2)
@@ -137,7 +138,7 @@ class WaveScene(QtWidgets.QGraphicsScene):
         path.closeSubpath()
         path.translate(0, 2)
         rightPath = self.addPath(path, self.wavePen, self.waveBrush)
-        rightLine = self.addLine(0, 50, rightPath.boundingRect().width(), 50, self.zeroPen)
+        rightLine = self.addLine(0, 53.5, rightPath.boundingRect().width(), 53.5, self.zeroPen)
         rightLine.setFlags(rightLine.flags() ^ rightLine.ItemIgnoresTransformations)
         leftText = self.addText('L')
         leftText.setY(-1)
@@ -206,7 +207,7 @@ class Player(QtCore.QObject):
     stopped = QtCore.pyqtSignal()
     paused = QtCore.pyqtSignal()
 
-    def __init__(self, main, audioDeviceName=None):
+    def __init__(self, main, audioDeviceName=None, sampleRateConversion='sinc_fastest'):
         QtCore.QObject.__init__(self)
         self.main = main
         self.audioBufferArray = QtCore.QBuffer(self)
@@ -214,6 +215,10 @@ class Player(QtCore.QObject):
         self.audioDevice = None
         self.setAudioDeviceByName(audioDeviceName)
         self.setAudioDevice()
+        self.sampleRateConversion = sampleRateConversion
+
+    def setSampleRateConversion(self, sampleRateConversion='sinc_fastest'):
+        self.sampleRateConversion = sampleRateConversion
 
     def setAudioDeviceByName(self, audioDeviceName):
         defaultDevice = QtMultimedia.QAudioDeviceInfo.defaultOutputDevice()
@@ -284,7 +289,7 @@ class Player(QtCore.QObject):
     def play(self, waveData, info):
         if info.samplerate != self.sampleRate:
             #ratio is output/input
-            waveData = samplerate.resample(waveData, self.sampleRate / info.samplerate, 'sinc_fastest')
+            waveData = samplerate.resample(waveData, self.sampleRate / info.samplerate, self.sampleRateConversion)
             
         if info.channels == 1:
             waveData = waveData.repeat(2, axis=1)/2
@@ -400,9 +405,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
         uic.loadUi('{}/main.ui'.format(os.path.dirname(constants.__file__)), self, package='samplebrowsesrc.widgets', resource_suffix='')
         if not QtGui.QIcon.themeName():
             QtGui.QIcon.setThemeName('TangoCustom')
-        self.audioSettingsDialog = AudioSettingsDialog(self)
         self.settings = QtCore.QSettings()
-        self.player = Player(self, self.settings.value('AudioDevice'))
+        self.player = Player(self, self.settings.value('AudioDevice'), self.settings.value('SampleRateConversion', 'sinc_fastest'))
         self.player.stopped.connect(self.stopped)
         self.player.output.notify.connect(self.movePlayhead)
         self.sampleSize = self.player.sampleSize
@@ -587,10 +591,12 @@ class SampleBrowse(QtWidgets.QMainWindow):
         helpMenu.addActions([settingsAction, utils.menuSeparator(self), aboutAction])
 
     def showAudioSettings(self):
-        res = self.audioSettingsDialog.exec_()
+        res = AudioSettingsDialog(self).exec_()
         if not res:
             return
-        self.player.setAudioDevice(res)
+        device, conversion = res
+        self.player.setAudioDevice(device)
+        self.player.setSampleRateConversion(conversion)
 
     def quit(self):
         self.dbConn.commit()
@@ -797,6 +803,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         model = fileIndex.model()
         item = model.itemFromIndex(fileIndex)
         utils.setItalic(item, not readable)
+        self.audioInfoTabWidget.clear()
     
     def browse(self, path=None):
         if path is None:
@@ -1307,6 +1314,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
     def setCurrentWave(self, index=None):
         if index is None:
             self.waveScene.clear()
+            self.audioInfoTabWidget.clear()
         if self.currentShownSampleIndex and self.currentShownSampleIndex == index:
             return True
         fileIndex = index.sibling(index.row(), 0)
@@ -1319,6 +1327,9 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 info = soundfile.info(fileItem.data(FilePathRole))
                 fileItem.setData(info, InfoRole)
             except:
+                self.waveScene.clear()
+                self.audioInfoTabWidget.clear()
+                utils.setItalic(fileItem)
                 return False
         if self.sampleView.model() == self.dbProxyModel:
             tags = []
