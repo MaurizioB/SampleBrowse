@@ -695,7 +695,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
             self._addSampleToDb(filePath, fileName, info, ','.join(tags))
         self.dbConn.commit()
         self.reloadTags()
-        #TODO reload database table?
+        self.dbDirModel.updateTree()
+        #TODO: reload database table?
 
     def favouritesDataChanged(self, index, _):
         dirPathIndex = index.sibling(index.row(), 1)
@@ -1220,6 +1221,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.sampleView.resizeRowsToContents()
 
     def dbDirViewSelect(self, index):
+        print(index.data(FilePathRole))
         self.browseDb(('SELECT * from samples WHERE filePath LIKE ?', ('{}%'.format(index.data(FilePathRole)), )))
 
     def addSamplesToTag(self, sampleList, newTag):
