@@ -7,6 +7,7 @@ import sqlite3
 #from math import log
 from PyQt5 import QtCore, QtGui, QtMultimedia, QtWidgets, uic
 import soundfile
+import samplerate
 import numpy as np
 
 import samplebrowsesrc.icons
@@ -281,6 +282,10 @@ class Player(QtCore.QObject):
         self.output.stop()
 
     def play(self, waveData, info):
+        if info.samplerate != self.sampleRate:
+            #ratio is output/input
+            waveData = samplerate.resample(waveData, self.sampleRate / info.samplerate, 'sinc_fastest')
+            
         if info.channels == 1:
             waveData = waveData.repeat(2, axis=1)/2
         elif info.channels == 2:
