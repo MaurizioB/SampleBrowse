@@ -662,7 +662,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
         res = menu.exec_(self.fsView.mapToGlobal(pos))
         if res == addDirAction:
             dirLabelItem = QtGui.QStandardItem(dirIndex.data())
-            dirPathItem = QtGui.QStandardItem(dirPath)
+            dirPathItem = QtGui.QStandardItem(QtCore.QDir.toNativeSeparators(dirPath))
+            dirPathItem.setData(dirPath, FilePathRole)
             dirPathItem.setFlags(dirPathItem.flags() ^ QtCore.Qt.ItemIsEditable)
             self.favouritesModel.dataChanged.disconnect(self.favouritesDataChanged)
             self.favouritesModel.appendRow([dirLabelItem, dirPathItem])
@@ -694,7 +695,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
     def favouritesDataChanged(self, index, _):
         dirPathIndex = index.sibling(index.row(), 1)
         dirLabel = index.sibling(index.row(), 0).data()
-        dirPath = dirPathIndex.data()
+        dirPath = dirPathIndex.data(FilePathRole)
         self.settings.beginGroup('Favourites')
         for fav in self.settings.childKeys():
             if self.settings.value(fav) == dirPath:
@@ -709,7 +710,9 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.settings.beginGroup('Favourites')
         for fav in self.settings.childKeys():
             dirLabelItem = QtGui.QStandardItem(fav)
-            dirPathItem = QtGui.QStandardItem(self.settings.value(fav))
+            dirPath = self.settings.value(fav)
+            dirPathItem = QtGui.QStandardItem(QtCore.QDir.toNativeSeparators(dirPath))
+            dirPathItem.setData(dirPath, FilePathRole)
             dirPathItem.setFlags(dirPathItem.flags() ^ QtCore.Qt.ItemIsEditable)
             self.favouritesModel.appendRow([dirLabelItem, dirPathItem])
         self.settings.endGroup()
@@ -718,7 +721,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         if not index.isValid():
             return
         dirPathIndex = index.sibling(index.row(), 1)
-        self.browse(dirPathIndex.data())
+        self.browse(dirPathIndex.data(FilePathRole))
 
     def favouritesTableMousePressEvent(self, event):
         index = self.favouritesTable.indexAt(event.pos())
@@ -729,17 +732,16 @@ class SampleBrowse(QtWidgets.QMainWindow):
             return
         QtWidgets.QTableView.mousePressEvent(self.favouritesTable, event)
         dirPathIndex = index.sibling(index.row(), 1)
-        dirPath = dirPathIndex.data()
+        dirPath = dirPathIndex.data(FilePathRole)
         menu = QtWidgets.QMenu()
         scrollToAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('folder'), 'Show directory in tree', menu)
         removeAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('edit-delete'), 'Remove from favourites', menu)
         menu.addActions([scrollToAction, utils.menuSeparator(menu), removeAction])
         res = menu.exec_(self.favouritesTable.viewport().mapToGlobal(event.pos()))
         if res == scrollToAction:
-            self.fsView.setCurrentIndex(self.fsProxyModel.mapFromSource(self.fsModel.index(dirPath)))
-            self.fsView.scrollTo(
-                self.fsProxyModel.mapFromSource(self.fsModel.index(dirPath)), self.fsView.PositionAtTop
-                )
+            dirIndex = self.fsProxyModel.mapFromSource(self.fsModel.index(dirPath))
+            self.fsView.setCurrentIndex(dirIndex)
+            self.fsView.scrollTo(dirIndex, self.fsView.PositionAtTop)
         elif res == removeAction:
             self.settings.beginGroup('Favourites')
             for fav in self.settings.childKeys():
