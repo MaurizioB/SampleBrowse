@@ -1,3 +1,4 @@
+import sys
 from threading import Event
 import soundfile
 from PyQt5 import QtCore, QtGui
@@ -24,7 +25,7 @@ class DbDirModel(QtGui.QStandardItemModel):
             parentIndex = QtCore.QModelIndex()
             while depth < len(dirTree):
                 subdir = '{}/'.format(dirTree[depth])
-                if depth == 0:
+                if depth == 0 and sys.platform != 'win32':
                     subdir = '/{}'.format(subdir)
                 dirMatch = self.match(self.index(0, 0, parentIndex), QtCore.Qt.DisplayRole, subdir, flags=QtCore.Qt.MatchExactly)
                 if not dirMatch:
