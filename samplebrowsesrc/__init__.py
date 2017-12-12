@@ -486,7 +486,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.dbDirView.header().setStretchLastSection(False)
         self.dbDirView.resizeColumnToContents(1)
         #TODO: wtf?!
-        self.dbDirView.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+#        self.dbDirView.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
 #        self.dbDirView.header().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
 
         self.dbSplitter.setStretchFactor(0, 50)
