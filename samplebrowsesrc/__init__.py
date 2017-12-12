@@ -459,7 +459,11 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.dbDirView.setModel(self.dbDirModel)
         self.dbDirView.setHeaderHidden(True)
         self.dbDirView.header().setStretchLastSection(False)
-        self.dbDirModel.loaded.connect(lambda: self.dbDirView.header().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents))
+        self.dbDirModel.loaded.connect(lambda: [
+            self.dbDirView.resizeColumnToContents(1), 
+            self.dbDirView.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch), 
+            self.dbDirView.header().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+            ])
 #        self.dbDirView.resizeColumnToContents(1)
         #TODO: wtf?!
 #        self.dbDirView.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
