@@ -43,6 +43,7 @@ class DbDirModel(QtGui.QStandardItemModel):
                 self.setData(countIndex, '{}'.format(int(countIndex.data()) + 1))
                 depth += 1
         self.optimizeTree()
+        self.loaded.emit()
 
 
     def optimizeTree(self):
