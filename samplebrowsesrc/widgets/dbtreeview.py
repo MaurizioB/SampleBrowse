@@ -63,12 +63,13 @@ class DbTreeView(TreeViewWithLines):
 
     def dragMoveEvent(self, event):
         currentTagIndex = self.indexAt(event.pos())
+        formats = event.mimeData().formats()
         if self.currentTagIndex:
             self.update(self.currentTagIndex)
         if not currentTagIndex.isValid() or currentTagIndex in (self.model().index(0, 0), self.model().index(0, 1)):
             self.currentTagIndex = None
             self.dropTimer.stop()
-            if 'text/uri-list' in event.mimeData().formats():
+            if 'text/uri-list' in formats and (event.source() and not isinstance(event.source(), SampleView)):
                 event.accept()
             else:
                 event.ignore()
@@ -79,7 +80,7 @@ class DbTreeView(TreeViewWithLines):
                 self.dropTimer.start()
             #to enable item highlight at least for dbmodel drag we need this,
             #otherwise it will not show the right cursor icon when dragging from external sources
-            if 'application/x-qabstractitemmodeldatalist' in event.mimeData().formats():
+            if 'application/x-qabstractitemmodeldatalist' in formats:
                 QtWidgets.QTreeView.dragMoveEvent(self, event)
 
     def dragLeaveEvent(self, event):
@@ -123,7 +124,6 @@ class DbTreeView(TreeViewWithLines):
             self.samplesAddedToTag.emit(sampleList, currentTag)
         elif 'text/uri-list' in formats:
             tag = self.model().sourceModel().pathFromIndex(self.model().mapToSource(currentTagIndex))
-            print(type(event.mimeData().data('text/uri-list')))
             urlList = str(event.mimeData().data('text/uri-list'), encoding='ascii').split()
             fileList = []
             dirList = []
