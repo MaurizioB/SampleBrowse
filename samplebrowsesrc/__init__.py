@@ -1014,7 +1014,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             filePath, fileName, length, format, sampleRate, channels, subtype, tags, data = row
             fileItem = QtGui.QStandardItem(fileName)
             fileItem.setData(filePath, FilePathRole)
-            dirItem = QtGui.QStandardItem(QtCore.QDir.toNativeSeparators(filePath))
+            dirItem = QtGui.QStandardItem(QtCore.QDir.toNativeSeparators(QtCore.QFileInfo(filePath).absolutePath()))
             fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-start'))
             lengthItem = QtGui.QStandardItem('{:.3f}'.format(length))
             formatItem = QtGui.QStandardItem(format)
@@ -1205,7 +1205,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             fileItem = QtGui.QStandardItem(fileName)
             fileItem.setData(filePath, FilePathRole)
             fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-start'))
-            dirItem = QtGui.QStandardItem(QtCore.QFileInfo(filePath).absolutePath())
+            dirItem = QtGui.QStandardItem(QtCore.QDir.toNativeSeparators(QtCore.QFileInfo(filePath).absolutePath()))
             lengthItem = QtGui.QStandardItem('{:.3f}'.format(length))
             formatItem = QtGui.QStandardItem(format)
             rateItem = QtGui.QStandardItem(str(sampleRate))
