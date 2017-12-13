@@ -1222,6 +1222,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.sampleView.resizeRowsToContents()
 
     def dbDirViewSelect(self, index):
+        if index.column() != 0:
+            index = index.sibling(index.row(), 0)
         self.browseDb(('SELECT * from samples WHERE filePath LIKE ?', ('{}%'.format(index.data(FilePathRole)), )))
 
     def addSamplesToTag(self, sampleList, newTag):
