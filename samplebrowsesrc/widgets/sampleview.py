@@ -90,7 +90,8 @@ class SampleView(QtWidgets.QTableView):
         drag.setMimeData(mimeData)
         drag.setPixmap(self.createDragPixmap(fileList))
         drag.setHotSpot(QtCore.QPoint(32, 10))
-        drag.exec_(actions, QtCore.Qt.CopyAction)
+#        drag.exec_(actions, QtCore.Qt.CopyAction)
+        drag.exec_(QtCore.Qt.CopyAction)
 
 
     def createDragPixmap(self, fileList):
