@@ -363,6 +363,23 @@ class SampleView(QtWidgets.QTableView):
                 QtWidgets.QToolTip.showText(event.pos(), '')
         return QtWidgets.QTableView.viewportEvent(self, event)
 
+    def dragEnterEvent(self, event):
+#        event.ignore()
+#        if event.source() != self:
+#            return
+        print(event.mimeData().formats())
+        if not event.mimeData().hasUrls():
+#            event.mimeData().setData('text/uri-list', bytearray('\n'.join(['file://{}'.format(QtCore.QUrl.fromLocalFile(fileIndex.data(FilePathRole)).path()) for fileIndex in self.selectionModel().selectedRows()]), encoding='ascii'))
+            event.mimeData().setUrls([QtCore.QUrl.fromLocalFile(fileIndex.data(FilePathRole)) for fileIndex in self.selectionModel().selectedRows()])
+        else:
+            print(event.mimeData().urls())
+            print(event.mimeData().data('text/uri-list'))
+            print(event.mimeData().formats())
+
+#    def startDrag(self, actions):
+#        print(int(actions))
+#        QtWidgets.QTableView.startDrag(self, actions)
+
 
 class SampleBrowse(QtWidgets.QMainWindow):
     def __init__(self):

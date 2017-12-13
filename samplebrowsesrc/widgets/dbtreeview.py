@@ -123,6 +123,7 @@ class DbTreeView(TreeViewWithLines):
             self.samplesAddedToTag.emit(sampleList, currentTag)
         elif 'text/uri-list' in formats:
             tag = self.model().sourceModel().pathFromIndex(self.model().mapToSource(currentTagIndex))
+            print(type(event.mimeData().data('text/uri-list')))
             urlList = str(event.mimeData().data('text/uri-list'), encoding='ascii').split()
             fileList = []
             dirList = []
