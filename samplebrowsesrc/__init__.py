@@ -348,7 +348,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.fsView.sortByColumn(0, QtCore.Qt.AscendingOrder)
 #        self.fsView.setRootIndex(self.fsModel.index(QtCore.QDir.currentPath()))
         self.fsView.setCurrentIndex(self.fsProxyModel.mapFromSource(self.fsModel.index(QtCore.QDir.currentPath())))
-        self.fsView.doubleClicked.connect(self.dirChanged)
+        self.fsView.clicked.connect(self.dirChanged)
         self.fsView.customContextMenuRequested.connect(self.fsViewContextMenu)
 
         self.favouritesModel = QtGui.QStandardItemModel()
@@ -382,7 +382,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.dbTreeProxyModel = QtCore.QSortFilterProxyModel()
         self.dbTreeProxyModel.setSourceModel(self.dbTreeModel)
         self.dbTreeView.setModel(self.dbTreeProxyModel)
-        self.dbTreeView.doubleClicked.connect(self.dbTreeViewDoubleClicked)
+        self.dbTreeView.clicked.connect(self.dbTreeViewDoubleClicked)
         self.dbSplitter.addWidget(self.dbTreeView, collapsible=False)
 
         self.dbDirView = TreeViewWithLines()
