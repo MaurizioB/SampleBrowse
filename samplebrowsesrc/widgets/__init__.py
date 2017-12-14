@@ -1,4 +1,5 @@
 from samplebrowsesrc.widgets.sampleview import *
+from samplebrowsesrc.widgets.searchfilter import *
 from samplebrowsesrc.widgets.advsplitter import *
 from samplebrowsesrc.widgets.tagseditor import *
 from samplebrowsesrc.widgets.delegates import *

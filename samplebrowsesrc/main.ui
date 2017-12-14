@@ -159,6 +159,9 @@
       </property>
       <widget class="QWidget" name="verticalLayoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout">
+        <property name="bottomMargin">
+         <number>6</number>
+        </property>
         <item>
          <widget class="SampleView" name="sampleView">
           <property name="contextMenuPolicy">
@@ -261,12 +264,12 @@
    <slot>setValue(int)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>248</x>
-     <y>51</y>
+     <x>383</x>
+     <y>58</y>
     </hint>
     <hint type="destinationlabel">
-     <x>339</x>
-     <y>53</y>
+     <x>444</x>
+     <y>63</y>
     </hint>
    </hints>
   </connection>
@@ -277,12 +280,12 @@
    <slot>setValue(int)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>324</x>
-     <y>38</y>
+     <x>444</x>
+     <y>63</y>
     </hint>
     <hint type="destinationlabel">
-     <x>220</x>
-     <y>44</y>
+     <x>383</x>
+     <y>58</y>
     </hint>
    </hints>
   </connection>

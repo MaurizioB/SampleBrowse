@@ -209,9 +209,56 @@ class TagsModel(QtGui.QStandardItemModel):
 
 
 class SampleSortFilterProxyModel(QtCore.QSortFilterProxyModel):
+    def __init__(self, *args, **kwargs):
+        QtCore.QSortFilterProxyModel.__init__(self, *args, **kwargs)
+        self.currentFilterData = {}
+        self.currentTextFilter = ''
+
     def itemFromIndex(self, index):
         return self.sourceModel().itemFromIndex(self.mapToSource(index))
+#        self.dbProxyModel.setFilterRegExp(text)
 
+    def setFilterData(self, filterDataList):
+        self.currentFilterData = {}
+        for filterColumn, filterData in filterDataList:
+            if filterColumn == fileNameColumn:
+                self.currentTextFilter = filterData
+                continue
+            self.currentFilterData[filterColumn] = filterData
+        self.invalidateFilter()
+        print(self.currentFilterData)
+
+    def filterAcceptsRow(self, row, parent):
+        if not self.currentFilterData:
+            if not self.currentTextFilter:
+                return True
+            if self.currentTextFilter.lower() in self.sourceModel().item(row, fileNameColumn).text().lower():
+                return True
+        else:
+            for filterColumn, filterData in self.currentFilterData.items():
+                if isinstance(filterData, list):
+                    for item in filterData:
+                        if self.sourceModel().item(row, filterColumn).text().lower() == item.lower():
+                            break
+                    else:
+                        return False
+                else:
+                    value = float(self.sourceModel().item(row, filterColumn).text())
+                    if filterData.greater:
+                        greater, greaterEqual = filterData.greater
+                        greater = float(greater)
+                        if (greater > value) or (not greaterEqual and greater >= value):
+                            return False
+                    if filterData.less:
+                        less, lessEqual = filterData.less
+                        less = float(less)
+                        if (less < value) or (not lessEqual and less <= value):
+                            return False
+            if not self.currentTextFilter or self.currentTextFilter.lower() in self.sourceModel().item(row, fileNameColumn).text().lower():
+                return True
+        return False
+
+#        return QtCore.QSortFilterProxyModel.filterAcceptsRow(self, row, parent)
 
 class MultiDirIterator(object):
     def __init__(self, dirList, *args, **kwargs):

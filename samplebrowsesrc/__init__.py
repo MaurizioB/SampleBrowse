@@ -442,19 +442,14 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.player.started.connect(self.waveScene.showPlayhead)
 
         self.filterStackedLayout = QtWidgets.QStackedLayout()
+        self.filterStackedLayout.sizeHint = lambda: QtCore.QSize(10, 10)
+        self.filterStackedLayout.minimumSize = lambda: QtCore.QSize(10, 10)
         self.filterStackedWidget.setLayout(self.filterStackedLayout)
         self.browsePathLbl = EllipsisLabel()
         self.filterStackedLayout.addWidget(self.browsePathLbl)
-        self.filterWidget = QtWidgets.QWidget()
-        self.filterWidget.setContentsMargins(0, 0, 0, 0)
+        self.filterWidget = MainFilterWidget()
+        self.filterWidget.filtersChanged.connect(self.dbProxyModel.setFilterData)
         self.filterStackedLayout.addWidget(self.filterWidget)
-        filterLayout = QtWidgets.QHBoxLayout()
-        filterLayout.setContentsMargins(0, 0, 0, 0)
-        self.filterWidget.setLayout(filterLayout)
-        filterLayout.addWidget(QtWidgets.QLabel('Search'))
-        self.searchEdit = QtWidgets.QLineEdit()
-        self.searchEdit.textChanged.connect(self.searchDb)
-        filterLayout.addWidget(self.searchEdit)
 
         self.audioInfoTabWidget.tagsApplied.connect(self.tagsApplied)
 
@@ -966,9 +961,6 @@ class SampleBrowse(QtWidgets.QMainWindow):
             self.sampleView.horizontalHeader().setSectionResizeMode(c, QtWidgets.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
 
-    def searchDb(self, text):
-        self.dbProxyModel.setFilterRegExp(text)
-
     def editTags(self, index):
         if self.sampleView.model() != self.dbProxyModel or index.column() != tagsColumn:
             return
@@ -1187,7 +1179,10 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
     def toggleBrowser(self, index):
         self.browserStackedLayout.setCurrentIndex(index)
+        self.filterStackedLayout.minimumSize = self.filterStackedLayout.itemAt(index).widget().minimumSizeHint
         self.filterStackedLayout.setCurrentIndex(index)
+
+
         if index == 0:
             self.sampleView.setModel(self.browseModel)
             self.browse()
