@@ -1,3 +1,5 @@
-PySoundFile==0.9.0.post1
 PyQt5==5.7.1
+numpy==1.14.0rc1
+samplerate==0.1.0
 soundfile==0.9.0.post1
+PySoundFile==0.9.0.post1

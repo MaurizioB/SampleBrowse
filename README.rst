@@ -6,12 +6,21 @@ An audio sample browser and manager.
 Requirements
 ------------
 
+Windows
+.......
+- Windows Vista
+
+Linux and source code
+.....................
 - Python >= 3.4.5
 - PyQt5 >= 5.7.1
-- pysoundfile >= 0.9.0
+- numpy >= 1.14.0rc1
+- PySoundFile >= 0.9.0
+- python samplerate >= 0.1.0
 
-Install
--------
+
+Source code install
+-------------------
 
     `./setup.py install [--user] [--record files.txt]`
 
