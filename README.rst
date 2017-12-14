@@ -22,7 +22,7 @@ Linux and source code
 Source code install
 -------------------
 
-    `./setup.py install [--user] [--record files.txt]`
+    ``./setup.py install [--user] [--record files.txt]``
 
-- `--user` to install locally instead of system-wide
-- `--record` to keep track of installed files
+- ``--user`` to install locally instead of system-wide
+- ``--record`` to keep track of installed files
