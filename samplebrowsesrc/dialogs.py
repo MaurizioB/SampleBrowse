@@ -8,21 +8,56 @@ from samplebrowsesrc.constants import *
 from samplebrowsesrc.widgets.colorlineedit import ColorLineEdit
 from samplebrowsesrc.widgets import TagsEditorTextEdit, AlignItemDelegate, TagListDelegate, SubtypeDelegate
 from samplebrowsesrc.classes import SampleSortFilterProxyModel, Crawler
-from samplebrowsesrc.info import __version__
+from samplebrowsesrc.info import __version__, __author__, __description__, __codeurl__
 audioDevice = namedtuple('audioDevice', 'device name sampleRates sampleSizes channels')
 
 
-class AboutDialog(QtWidgets.QMessageBox):
+class AboutDialog(QtWidgets.QDialog):
     def __init__(self, parent):
-        QtWidgets.QMessageBox.__init__(
-            self, 
-            QtWidgets.QMessageBox.Information, 
-            'About SampleBrowse', 
-            '''
-            <h2>SampleBrowse</h2>
-            Version: {version}
-            '''.format(version=__version__), 
-            parent=parent)
+        QtWidgets.QDialog.__init__(self, parent)
+        uic.loadUi('{}/about.ui'.format(os.path.dirname(utils.__file__)), self)
+        self.iconLbl.setPixmap(QtGui.QIcon(':/icons/TangoCustom/64x64/samplebrowse.png').pixmap(64))
+        self.descriptionLbl.setText(__description__)
+        self.versionEntry.setText(__version__)
+        self.authorEntry.setText(__author__)
+        self.websiteEntry.setText('<a href="{}">Project on GitHub</a>'.format(__codeurl__))
+
+        self.aboutQtBtn.setIcon(QtGui.QIcon(':/qt-project.org/qmessagebox/images/qtlogo-64.png'))
+        self.aboutQtBtn.clicked.connect(lambda: QtWidgets.QMessageBox.aboutQt(self))
+
+        self.aknTextEdit.setHtml('''
+            SampleBrowse wouldn't have been possible without the following libraries and people...
+            <h3>libsndfile</h3>
+            Written by Erik de Castro Lopo: <a href="http://www.mega-nerd.com/libsndfile/">mega-nerd.com</a><br/>
+            Python module written by <a href="http://www.mega-nerd.com/">Alex Roebel</a>:
+                <a href="https://pypi.python.org/pypi/pysndfile">pysndfile</a>
+            
+            <h3><u>S</u>ecret <u>R</u>abbit <u>C</u>ode (aka libsamplerate)</h3>
+            Written by Erik de Castro Lopo: <a href="http://www.mega-nerd.com/SRC/">mega-nerd.com</a><br/>
+            Python module written by <a href="https://github.com/tuxu">Tino Wagner</a>: 
+                <a href="https://pypi.python.org/pypi/samplerate">samplerate</a>
+            
+            <h3>Thanks to:</h3>
+            Faber aka Fabio Vescarelli (<a href="http://www.faberbox.com/">faberbox.com</a>) for his great help in helping mega
+            to understand the secrets of Python... and his patience ;-)
+            ''')
+        self.shown = False
+
+    #since there are some issues with QLabels in layouts, we set the minimum width
+    def exec_(self):
+        self.show()
+        fontMetrics = QtGui.QFontMetrics(self.font())
+        keySize = max([fontMetrics.width(w.text()) for w in (self.websiteLbl, self.authorLbl, self.versionLbl)])
+        websiteDoc = QtGui.QTextDocument()
+        websiteDoc.setHtml(self.websiteEntry.text())
+        websiteDocSize = fontMetrics.width(websiteDoc.toPlainText())
+        valueSize = max([fontMetrics.width(w.text()) for w in (self.authorEntry, self.versionEntry)] + [websiteDocSize])
+        self.aboutTab.setMinimumWidth(
+            self.iconLbl.minimumWidth() + 
+            max((keySize + valueSize, fontMetrics.width(self.descriptionLbl.text()))) +
+            self.aboutTab.layout().horizontalSpacing() + 
+            self.aboutTab.layout().contentsMargins().left() + self.aboutTab.layout().contentsMargins().right() 
+            )
 
 
 class AudioDeviceProber(QtCore.QObject):
