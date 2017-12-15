@@ -670,7 +670,7 @@ class FilterContainer(QtWidgets.QFrame):
         self.filtersChanged.emit(filterData)
 
     def minimumSizeHint(self):
-        return QtCore.QSize(480, self.fontMetrics().height() + 8)
+        return QtCore.QSize(240, self.fontMetrics().height() + 18)
 
 
 class FilterLineEdit(QtWidgets.QLineEdit):

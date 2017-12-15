@@ -226,7 +226,7 @@ class SampleSortFilterProxyModel(QtCore.QSortFilterProxyModel):
                 continue
             self.currentFilterData[filterColumn] = filterData
         self.invalidateFilter()
-        print(self.currentFilterData)
+#        print(self.currentFilterData)
 
     def filterAcceptsRow(self, row, parent):
         if not self.currentFilterData:
