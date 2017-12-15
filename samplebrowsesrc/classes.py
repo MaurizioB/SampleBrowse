@@ -238,12 +238,12 @@ class SampleSortFilterProxyModel(QtCore.QSortFilterProxyModel):
             for filterColumn, filterData in self.currentFilterData.items():
                 if isinstance(filterData, list):
                     for item in filterData:
-                        if self.sourceModel().item(row, filterColumn).text().lower() == item.lower():
+                        if self.sourceModel().item(row, filterColumn).data(DataRole) == item:
                             break
                     else:
                         return False
                 else:
-                    value = float(self.sourceModel().item(row, filterColumn).text())
+                    value = self.sourceModel().item(row, filterColumn).data(DataRole)
                     if filterData.greater:
                         greater, greaterEqual = filterData.greater
                         greater = float(greater)
@@ -258,7 +258,6 @@ class SampleSortFilterProxyModel(QtCore.QSortFilterProxyModel):
                 return True
         return False
 
-#        return QtCore.QSortFilterProxyModel.filterAcceptsRow(self, row, parent)
 
 class MultiDirIterator(object):
     def __init__(self, dirList, *args, **kwargs):

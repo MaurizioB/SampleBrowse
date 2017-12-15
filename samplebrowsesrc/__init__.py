@@ -15,6 +15,7 @@ from samplebrowsesrc.widgets import *
 from samplebrowsesrc.constants import *
 from samplebrowsesrc.dialogs import *
 from samplebrowsesrc.classes import *
+from samplebrowsesrc.utils import *
 
 class EllipsisLabel(QtWidgets.QLabel):
     def __init__(self, *args, **kwargs):
@@ -302,6 +303,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
     def __init__(self):
         QtWidgets.QMainWindow.__init__(self)
         uic.loadUi('{}/main.ui'.format(os.path.dirname(constants.__file__)), self, package='samplebrowsesrc.widgets', resource_suffix='')
+        self.setWindowIcon(QtGui.QIcon(':/icons/TangoCustom/32x32/samplebrowse.png'))
         if not QtGui.QIcon.themeName():
             QtGui.QIcon.setThemeName('TangoCustom')
         self.settings = QtCore.QSettings()
@@ -427,8 +429,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.sampleView.setMouseTracking(True)
         self.sampleControlDelegate = SampleControlDelegate()
         self.sampleControlDelegate.controlClicked.connect(self.playToggle)
+        #TODO: fix this inconsistency!
         self.sampleControlDelegate.doubleClicked.connect(self.play)
-#        self.sampleControlDelegate.contextMenuRequested.connect(self.sampleContextMenu)
         self.sampleView.clicked.connect(self.setCurrentWave)
         self.sampleView.doubleClicked.connect(self.editTags)
         self.sampleView.setItemDelegateForColumn(0, self.sampleControlDelegate)
@@ -738,7 +740,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
 #                print e
                 continue
             dirItem = QtGui.QStandardItem(fileInfo.absolutePath())
-            lengthItem = QtGui.QStandardItem('{:.3f}'.format(float(info.frames) / info.samplerate))
+            lengthItem = QtGui.QStandardItem(timeStr(float(info.frames) / info.samplerate, trailingAlways=True))
             formatItem = QtGui.QStandardItem(info.format)
             rateItem = QtGui.QStandardItem(str(info.samplerate))
             channelsItem = QtGui.QStandardItem(str(info.channels))
@@ -945,11 +947,16 @@ class SampleBrowse(QtWidgets.QMainWindow):
             fileItem.setData(filePath, FilePathRole)
             dirItem = QtGui.QStandardItem(QtCore.QDir.toNativeSeparators(QtCore.QFileInfo(filePath).absolutePath()))
             fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-start'))
-            lengthItem = QtGui.QStandardItem('{:.3f}'.format(length))
+            lengthItem = QtGui.QStandardItem(timeStr(length, trailingAlways=True))
+            lengthItem.setData(length, DataRole)
             formatItem = QtGui.QStandardItem(format)
+            formatItem.setData(format, DataRole)
             rateItem = QtGui.QStandardItem(str(sampleRate))
+            rateItem.setData(sampleRate, DataRole)
             channelsItem = QtGui.QStandardItem(str(channels))
+            channelsItem.setData(channels, DataRole)
             subtypeItem = QtGui.QStandardItem(subtype)
+            subtypeItem.setData(subtype, DataRole)
             tagsItem = QtGui.QStandardItem()
             tagsItem.setData(list(filter(None, tags.split(','))), TagsRole)
 #            self.dbModel.appendRow([fileItem, lengthItem, formatItem, rateItem, channelsItem, tagsItem])
@@ -1132,11 +1139,16 @@ class SampleBrowse(QtWidgets.QMainWindow):
             fileItem.setData(filePath, FilePathRole)
             fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-start'))
             dirItem = QtGui.QStandardItem(QtCore.QDir.toNativeSeparators(QtCore.QFileInfo(filePath).absolutePath()))
-            lengthItem = QtGui.QStandardItem('{:.3f}'.format(length))
+            lengthItem = QtGui.QStandardItem(timeStr(length, trailingAlways=True))
+            lengthItem.setData(length, DataRole)
             formatItem = QtGui.QStandardItem(format)
+            formatItem.setData(format, DataRole)
             rateItem = QtGui.QStandardItem(str(sampleRate))
+            rateItem.setData(sampleRate, DataRole)
             channelsItem = QtGui.QStandardItem(str(channels))
+            channelsItem.setData(channels, DataRole)
             subtypeItem = QtGui.QStandardItem(subtype)
+            subtypeItem.setData(subtype, DataRole)
             tagsItem = QtGui.QStandardItem()
             tagsItem.setData(list(filter(None, tags.split(','))), TagsRole)
             self.dbModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem, tagsItem])

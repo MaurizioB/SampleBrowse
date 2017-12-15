@@ -1,8 +1,13 @@
+import re
+from collections import namedtuple, OrderedDict
 import soundfile
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from samplebrowsesrc.constants import *
+from samplebrowsesrc.utils import *
 
+rangeData = namedtuple('rangeData', 'greater less')
+contextData = namedtuple('contextData', 'full short')
 
 class FilterCloseButton(QtWidgets.QAbstractButton):
     backgroundOut = QtCore.Qt.darkGray
@@ -42,7 +47,7 @@ class FilterWidget(QtWidgets.QWidget):
     validColor = QtCore.Qt.black
     invalidColor = QtCore.Qt.red
     headerColors = invalidColor, validColor
-    def __init__(self, header, field, parent, fmtString=None, fmtFunc=None):
+    def __init__(self, parent, header, field, context, editorClass, filter=None):
         QtWidgets.QWidget.__init__(self, parent)
         self.closeBtn = FilterCloseButton(self)
         self.closeBtn.clicked.connect(lambda: self.deleted.emit(self))
@@ -51,21 +56,26 @@ class FilterWidget(QtWidgets.QWidget):
         self.header = header
         self.field = field
         self.contentWidth = 0
-        self.fmtString = fmtString
-        self.fmtFunc = fmtFunc
-        self.setContent()
+        self.context = context
+        self.editorClass = editorClass
+        self.setFilter(filter)
 
     def data(self):
-        return self.contents if self.valid else None
+        return self.values if self.valid else None
 
-    def setContent(self, contentList=None):
-        if not contentList:
-            self.contents = ['None']
+    def setFilter(self, valueList=None):
+        self.values = valueList
+        if not valueList:
+            self.displayValues = ['None']
             self.contentWidth = self.fontMetrics().width('None') + self.hMargin * 2
             self.valid = False
         else:
-            self.contents = contentList[:]
-            self.contentWidth = sum([self.fontMetrics().width(content) for content in contentList]) + self.hMargin * (len(contentList) * 2 + 1)
+            self.contentWidth = 0
+            self.displayValues = []
+            for value in valueList:
+                displayValue = self.context[value].short
+                self.displayValues.append(displayValue)
+                self.contentWidth += self.fontMetrics().width(displayValue) + self.hMargin * 2
             self.valid = True
         self.resizeToContents()
         self.changed.emit()
@@ -74,10 +84,11 @@ class FilterWidget(QtWidgets.QWidget):
         if event.button() == QtCore.Qt.LeftButton:
             self.editFilter()
 
-    def editFilter(self, editor):
-        editor.changed.connect(self.setContent)
+    def editFilter(self):
+        editor = self.editorClass(self)
+        editor.changed.connect(self.setFilter)
         editor.closed.connect(lambda: [editor.changed.disconnect(), editor.deleteLater()])
-        editor.move(self.mapToGlobal(QtCore.QPoint(0, self.height())))
+#        editor.move(self.mapToGlobal(QtCore.QPoint(0, self.height())))
         editor.show()
 
     def paintPrimitive(self):
@@ -110,27 +121,35 @@ class FilterWidget(QtWidgets.QWidget):
         qp = self.paintPrimitive()
         qp.setBrush(QtCore.Qt.darkGray)
         qp.setPen(QtCore.Qt.white)
-        for content in self.contents:
-            if self.fmtString:
-                try:
-                    if self.fmtFunc:
-                        content = self.fmtString.format(self.fmtFunc(content))
-                    else:
-                        content = self.fmtString.format(content)
-                except:
-                    pass
-            rect = QtCore.QRect(0, self.hMargin, self.fontMetrics().width(content) + self.hMargin * 2, self.height() - self.hMargin * 2)
+        for value in self.displayValues:
+            rect = QtCore.QRect(0, self.hMargin, self.fontMetrics().width(value) + self.hMargin * 2, self.height() - self.hMargin * 2)
             qp.drawRoundedRect(rect, 2, 2)
             rect = QtCore.QRect(2, self.hMargin, rect.width() -4, rect.height())
-            qp.drawText(rect, QtCore.Qt.AlignCenter, content)
+            qp.drawText(rect, QtCore.Qt.AlignCenter, value)
             qp.translate(rect.width() + self.hMargin, 0)
 
 
 class BaseSelectionWidget(QtWidgets.QWidget):
     changed = QtCore.pyqtSignal(object)
     closed = QtCore.pyqtSignal()
-    def __init__(self, parent, context, selected):
-        QtWidgets.QWidget.__init__(self, parent, QtCore.Qt.Popup)
+
+    def showEvent(self, event):
+        desktopGeo = QtWidgets.QDesktopWidget().screenGeometry(self.parent())
+        topLeft = self.parent().mapToGlobal(QtCore.QPoint(0, 0))
+        parentHeight = self.parent().height()
+        y = topLeft.y() + parentHeight
+        if y + self.height() > desktopGeo.height():
+            y = topLeft.y() - self.height()
+        if topLeft.x() + self.width() <= desktopGeo.width():
+            x = topLeft.x()
+        else:
+            x = desktopGeo.width() - self.width()
+        self.move(x, y)
+
+
+class ListSelectionWidget(BaseSelectionWidget):
+    def __init__(self, parent):
+        BaseSelectionWidget.__init__(self, parent, QtCore.Qt.Popup)
         self.setWindowModality(QtCore.Qt.WindowModal)
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
@@ -140,15 +159,14 @@ class BaseSelectionWidget(QtWidgets.QWidget):
         self.listView.setModel(self.model)
         self.model.dataChanged.connect(self.checkData)
         self.listView.setEditTriggers(self.listView.NoEditTriggers)
-#        self.listView.clicked.connect(self.toggleItem)
         self.listView.doubleClicked.connect(self.toggleItem)
         checked = []
         unchecked = []
-        for label, data in context:
-            item = QtGui.QStandardItem(label)
-            item.setData(data)
+        for value, display in parent.context.items():
+            item = QtGui.QStandardItem(display.full)
+            item.setData(value)
             item.setCheckable(True)
-            if data in selected:
+            if parent.values and value in parent.values:
                 item.setCheckState(QtCore.Qt.Checked)
                 checked.append(item)
             else:
@@ -173,34 +191,47 @@ class BaseSelectionWidget(QtWidgets.QWidget):
 
 
 class FormatFilterWidget(FilterWidget):
-    def __init__(self, parent):
-        FilterWidget.__init__(self, 'Formats: ', formatColumn, parent)
+    def __init__(self, parent, filter=None):
+        FilterWidget.__init__(
+            self, 
+            parent, 
+            'Formats: ', 
+            formatColumn, 
+            OrderedDict([(ext, contextData(soundfile.available_formats()[ext], ext)) for ext in sorted(soundfile.available_formats().keys())]), 
+            ListSelectionWidget, 
+            filter
+            )
         
-    def editFilter(self):
-        context = [(soundfile.available_formats()[ext], ext) for ext in sorted(soundfile.available_formats().keys())]
-        editor = BaseSelectionWidget(self, context, self.contents)
-        FilterWidget.editFilter(self, editor)
-
 
 class SampleRateFilterWidget(FilterWidget):
-    def __init__(self, parent):
-        func = lambda v: int(v)/1000.
-        FilterWidget.__init__(self, 'Sample rates: ', rateColumn, parent, fmtString='{:.1f} kHz', fmtFunc=func)
-        
-    def editFilter(self):
-        context = [('{:.1f} kHz'.format(sampleRate/1000.), str(sampleRate)) for sampleRate in sampleRatesList]
-        editor = BaseSelectionWidget(self, context, self.contents)
-        FilterWidget.editFilter(self, editor)
+    def __init__(self, parent, filter=None):
+        FilterWidget.__init__(
+            self, 
+            parent, 
+            'Sample rates: ', 
+            rateColumn, 
+            OrderedDict([(sr, contextData('{:.1f} kHz'.format(sr/1000.), str(sr))) for sr in sampleRatesList]), 
+            ListSelectionWidget, 
+            filter
+            )
 
 
-class RangeSelectionWidget(QtWidgets.QWidget):
-    changed = QtCore.pyqtSignal(object, object)
-    closed = QtCore.pyqtSignal()
-    def __init__(self, parent, context, greater, less):
-        QtWidgets.QWidget.__init__(self, parent, QtCore.Qt.Popup)
-        self.setWindowModality(QtCore.Qt.WindowModal)
-        layout = QtWidgets.QGridLayout()
-        self.setLayout(layout)
+class ChannelsFilterWidget(FilterWidget):
+    def __init__(self, parent, filter=None):
+        FilterWidget.__init__(
+            self, 
+            parent, 
+            'Channels: ', 
+            channelsColumn, 
+            OrderedDict([(ch, contextData(channelsLabels[ch], channelsLabels[ch])) for ch in sorted(channelsLabels.keys())]), 
+            ListSelectionWidget, 
+            filter
+            )
+
+
+class GrayedCheckBox(QtWidgets.QCheckBox):
+    def __init__(self, *args, **kwargs):
+        QtWidgets.QCheckBox.__init__(self, *args, **kwargs)
         palette = self.palette()
         enabled = palette.color(palette.Active, palette.ButtonText)
         disabled = palette.color(palette.Disabled, palette.ButtonText)
@@ -216,34 +247,49 @@ class RangeSelectionWidget(QtWidgets.QWidget):
             }}
             '''.format(enabled=enabled.name(), disabled=disabled.name()))
 
+
+class ComboRangeSelectionWidget(BaseSelectionWidget):
+    changed = QtCore.pyqtSignal(object, object)
+    def __init__(self, parent):
+        BaseSelectionWidget.__init__(self, parent, QtCore.Qt.Popup)
+        self.setWindowModality(QtCore.Qt.WindowModal)
+        layout = QtWidgets.QGridLayout()
+        self.setLayout(layout)
+
         self.lessChk = QtWidgets.QCheckBox('Less than')
         layout.addWidget(self.lessChk, 0, 0)
-        self.lessOrEqualChk = QtWidgets.QCheckBox('or equal to')
+        self.lessOrEqualChk = GrayedCheckBox('or equal to')
         layout.addWidget(self.lessOrEqualChk, 0, 1)
         self.lessCombo = QtWidgets.QComboBox()
         layout.addWidget(self.lessCombo, 0, 2)
 
         self.greaterChk = QtWidgets.QCheckBox('Greater than')
         layout.addWidget(self.greaterChk, 1, 0)
-        self.greaterOrEqualChk = QtWidgets.QCheckBox('or equal to')
+        self.greaterOrEqualChk = GrayedCheckBox('or equal to')
         layout.addWidget(self.greaterOrEqualChk, 1, 1)
         self.greaterCombo = QtWidgets.QComboBox()
         layout.addWidget(self.greaterCombo,1, 2)
 
-        for label, data in context:
-            self.lessCombo.addItem(label, data)
-            self.greaterCombo.addItem(label, data)
+        for value, display in parent.context.items():
+            self.lessCombo.addItem(display.full, value)
+            self.greaterCombo.addItem(display.full, value)
+        self.lessCombo.model().takeRow(self.lessCombo.model().rowCount() - 1)
+        self.greaterCombo.model().takeRow(0)
 
-        if less:
-            lessValue, lessEqual = less
+        if parent.less:
+            lessValue, lessEqual = parent.less
             self.lessChk.setChecked(True)
             self.lessOrEqualChk.setChecked(lessEqual)
             self.lessCombo.setCurrentIndex(self.lessCombo.findData(lessValue))
-        if greater:
-            greaterValue, greaterEqual = greater
+        else:
+            self.lessCombo.setCurrentIndex(0)
+        if parent.greater:
+            greaterValue, greaterEqual = parent.greater
             self.greaterChk.setChecked(True)
             self.greaterOrEqualChk.setChecked(greaterEqual)
             self.greaterCombo.setCurrentIndex(self.greaterCombo.findData(greaterValue))
+        else:
+            self.greaterCombo.setCurrentIndex(self.greaterCombo.count() - 1)
 
         self.lessChk.toggled.connect(self.checkData)
         self.greaterChk.toggled.connect(self.checkData)
@@ -271,43 +317,272 @@ class RangeSelectionWidget(QtWidgets.QWidget):
         self.closed.emit()
 
 
-#TODO: needs a good fix for value conversion
 class SampleRateRangeFilterWidget(FilterWidget):
-    def __init__(self, parent):
-        FilterWidget.__init__(self, 'Sample rate range: ', rateColumn, parent)
+    def __init__(self, parent, filter=None):
+        FilterWidget.__init__(
+            self, 
+            parent, 
+            'Sample rate range: ', 
+            rateColumn, 
+            OrderedDict([(sr, contextData('{:.1f} kHz'.format(sr/1000.), str(sr))) for sr in sampleRatesList]), 
+            ComboRangeSelectionWidget, 
+            filter
+            )
 
     def data(self):
         return rangeData(self.greater, self.less) if self.valid else None
 
-    def editFilter(self):
-        context = [('{:.1f} kHz'.format(sampleRate/1000.), str(sampleRate)) for sampleRate in sampleRatesList]
-        editor = RangeSelectionWidget(self, context, self.greater, self.less)
-        FilterWidget.editFilter(self, editor)
-
-    def setContent(self, greater=None, less=None):
+    def setFilter(self, greater=None, less=None):
+        self.values = None
         self.less = less
         self.greater = greater
         self.valid = True
         if less is None and greater is None:
-            self.contents = ['None']
+            self.displayValues = ['None']
             self.valid = False
         elif less is None:
             greaterValue, greaterEqual = greater
             symbol = '≥' if greaterEqual else '>'
-            self.contents = ['{} {:.1f} kHz'.format(symbol, int(greaterValue)/1000.)]
+            self.displayValues = ['{} {:.1f} kHz'.format(symbol, int(greaterValue)/1000.)]
         elif greater is None:
             lessValue, lessEqual = less
             symbol = '≤' if lessEqual else '<'
-            self.contents = ['{} {:.1f} kHz'.format(symbol, int(lessValue)/1000.)]
+            self.displayValues = ['{} {:.1f} kHz'.format(symbol, int(lessValue)/1000.)]
         else:
             lessValue, lessEqual = less
             lessSymbol = '≤' if lessEqual else '<'
             greaterValue, greaterEqual = greater
             greaterSymbol = '≤' if greaterEqual else '<'
-            self.contents = ['{greater:.1f} kHz {greaterSymbol} x {lessSymbol} {less:.1f} kHz'.format(greater=int(greaterValue)/1000., greaterSymbol=greaterSymbol, lessSymbol=lessSymbol, less=int(lessValue)/1000.)]
+            self.displayValues = ['{greater:.1f} kHz {greaterSymbol} R {lessSymbol} {less:.1f} kHz'.format(greater=int(greaterValue)/1000., greaterSymbol=greaterSymbol, lessSymbol=lessSymbol, less=int(lessValue)/1000.)]
             if greater >= less:
                 self.valid = False
-        self.contentWidth = self.fontMetrics().width(self.contents[0]) + self.hMargin * 2
+        self.contentWidth = self.fontMetrics().width(self.displayValues[0]) + self.hMargin * 2
+        self.resizeToContents()
+        self.changed.emit()
+
+
+class TimeValidator(QtGui.QValidator):
+    def __init__(self, *args, **kwargs):
+        QtGui.QValidator.__init__(self, *args, **kwargs)
+        self.fullRegex = re.compile(r'^(?:(?:(?P<hh>\d)[:])?(?P<mm>[0-5]?\d)[:])?(?P<ss>\d{1,3})[\.](?:(?P<ff>\d{1,3}))$')
+        self.midRegex = re.compile(r'^(?:(\d)?[:])?(?:([0-5]?\d)?[:])?(\d{0,3})(?:[.]\d{0,3})?$')
+
+    def validate(self, input, pos):
+        if not self.fullRegex.match(input):
+            if self.midRegex.match(input):
+                return self.Intermediate, input, pos
+            else:
+                return self.Invalid, input, pos
+        return self.Acceptable, input, pos
+
+
+class TimeSpinBox(QtWidgets.QAbstractSpinBox):
+    valueChanged = QtCore.pyqtSignal(float)
+    def __init__(self, *args, **kwargs):
+        QtWidgets.QAbstractSpinBox.__init__(self, *args, **kwargs)
+        self.setRange(0.001, 5040)
+        self._decimals = 3
+        self._step = 10
+        self._suffix = 's'
+        self._value = 10
+        self.timeRegex = re.compile(r'(?:(?:(?P<hh>\d)[:])?(?P<mm>[0-5]?\d)[:])?(?P<ss>\d{1,3})(?:(?P<ff>[\.]\d{1,3}))')
+        self.lineEdit().setMaxLength(11)
+        self.lineEdit().setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignVCenter)
+        self.lineEdit().sizeHint = self.lineEditSizeHint
+        self.validator = TimeValidator(self)
+        self.lineEdit().setValidator(self.validator)
+        self.lineEdit().textChanged.connect(self.textChanged)
+
+    def textChanged(self, text):
+        value = self.validate(text)
+        if value:
+            self._value = value
+            self.valueChanged.emit(value)
+
+    def validate(self, text):
+        match = self.timeRegex.match(text.strip(':').strip('.'))
+        if match:
+            value = 0
+            h = match.group('hh')
+            if h:
+                value += 3600 * int(h)
+            m = match.group('mm')
+            if m:
+                value += 60 * int(m)
+            s = match.group('ss')
+            if s:
+                value += int(s)
+            f = match.group('ff')
+            if f:
+                value += float(f)
+            return value
+        return
+
+    def focusOutEvent(self, event):
+        value = self.validate(self.lineEdit().text())
+        if value:
+            self._value = value
+            self.lineEdit().setText(timeStr(self._value, leading=2, trailingAlways=True, full=True))
+            self.valueChanged.emit(value)
+        else:
+            self.lineEdit().setText(timeStr(self._value, leading=2, trailingAlways=True, full=True))
+        QtWidgets.QAbstractSpinBox.focusOutEvent(self, event)
+
+    def lineEditSizeHint(self):
+        return QtCore.QSize(self.fontMetrics().width('0:00:00.000'), self.lineEdit().sizeHint().height())
+
+    def minimumSizeHint(self):
+        return self.lineEdit().sizeHint()
+
+    def value(self):
+        return self._value
+
+    def setValue(self, value):
+        self._setValue(value)
+        self.valueChanged.emit(value)
+
+    def _setValue(self, value):
+        self._value = value
+        self.lineEdit().setText(timeStr(value, leading=2, trailingAlways=True, full=True))
+
+    def minimum(self):
+        return self._minimum
+
+    def setMinimum(self, minimum):
+        self._minimum = minimum
+
+    def maximum(self):
+        return self._maximum
+
+    def setMaximum(self, maximum):
+        self._maximum = maximum
+
+    def setRange(self, minimum, maximum):
+        self._minimum = minimum
+        self._maximum = maximum
+
+    def stepBy(self, step):
+        if abs(step) == 1:
+            step *= 10
+        elif abs(step) == 10:
+            step *= 6
+        value = self._value + step
+        if value > self._maximum:
+            value = self._maximum
+        elif value < self._minimum:
+            value = self._minimum
+        self._setValue(value)
+        self.valueChanged.emit(value)
+
+    def stepEnabled(self):
+        flags = 0
+        if self._value > self._minimum:
+            flags |= self.StepDownEnabled
+        if self._value < self._maximum:
+            flags |= self.StepUpEnabled
+        return flags
+
+
+class SpinRangeSelectionWidget(BaseSelectionWidget):
+    changed = QtCore.pyqtSignal(object, object)
+    def __init__(self, parent):
+        BaseSelectionWidget.__init__(self, parent, QtCore.Qt.Popup)
+        self.setWindowModality(QtCore.Qt.WindowModal)
+        layout = QtWidgets.QGridLayout()
+        self.setLayout(layout)
+
+        self.lessChk = QtWidgets.QCheckBox('Less than')
+        layout.addWidget(self.lessChk, 0, 0)
+        self.lessOrEqualChk = GrayedCheckBox('or equal to')
+        layout.addWidget(self.lessOrEqualChk, 0, 1)
+        self.lessSpin = TimeSpinBox()
+        self.lessSpin.setValue(60)
+        layout.addWidget(self.lessSpin, 0, 2)
+
+        self.greaterChk = QtWidgets.QCheckBox('Greater than')
+        layout.addWidget(self.greaterChk, 1, 0)
+        self.greaterOrEqualChk = GrayedCheckBox('or equal to')
+        layout.addWidget(self.greaterOrEqualChk, 1, 1)
+        self.greaterSpin = TimeSpinBox()
+        self.greaterSpin.setValue(1)
+        layout.addWidget(self.greaterSpin, 1, 2)
+
+        if parent.less:
+            lessValue, lessEqual = parent.less
+            self.lessChk.setChecked(True)
+            self.lessOrEqualChk.setChecked(lessEqual)
+            self.lessSpin.setValue(lessValue)
+        if parent.greater:
+            greaterValue, greaterEqual = parent.greater
+            self.greaterChk.setChecked(True)
+            self.greaterOrEqualChk.setChecked(greaterEqual)
+            self.greaterSpin.setValue(greaterValue)
+
+        self.lessChk.toggled.connect(self.checkData)
+        self.greaterChk.toggled.connect(self.checkData)
+        self.lessOrEqualChk.toggled.connect(self.checkData)
+        self.greaterOrEqualChk.toggled.connect(self.checkData)
+        self.lessSpin.valueChanged.connect(self.checkData)
+        self.greaterSpin.valueChanged.connect(self.checkData)
+
+        self.checkData()
+
+    def checkData(self, *args):
+        less = self.lessChk.isChecked()
+        lessValue = self.lessSpin.value()
+        lessEqual = self.lessOrEqualChk.isChecked()
+        self.lessOrEqualChk.setEnabled(less)
+        self.lessSpin.setEnabled(less)
+        greater = self.greaterChk.isChecked()
+        greaterValue = self.greaterSpin.value()
+        greaterEqual = self.greaterOrEqualChk.isChecked()
+        self.greaterOrEqualChk.setEnabled(greater)
+        self.greaterSpin.setEnabled(greater)
+        self.changed.emit((greaterValue, greaterEqual) if greater else None, (lessValue, lessEqual) if less else None)
+
+    def hideEvent(self, event):
+        self.closed.emit()
+
+
+class LengthRangeFilterWidget(FilterWidget):
+    def __init__(self, parent, filter=None):
+        FilterWidget.__init__(
+            self, 
+            parent, 
+            'Length: ', 
+            lengthColumn, 
+            None, 
+            SpinRangeSelectionWidget, 
+            )
+
+    def data(self):
+        return rangeData(self.greater, self.less) if self.valid else None
+
+    def setFilter(self, greater=None, less=None):
+        self.values = None
+        self.less = less
+        self.greater = greater
+        self.valid = True
+        if less is None and greater is None:
+            self.displayValues = ['None']
+            self.valid = False
+        elif less is None:
+            greaterValue, greaterEqual = greater
+            symbol = '≥' if greaterEqual else '>'
+            self.displayValues = ['{} {}s'.format(symbol, timeStr(greaterValue))]
+        elif greater is None:
+            lessValue, lessEqual = less
+            symbol = '≤' if lessEqual else '<'
+            self.displayValues = ['{} {}s'.format(symbol, timeStr(lessValue))]
+        else:
+            lessValue, lessEqual = less
+            lessSymbol = '≤' if lessEqual else '<'
+            greaterValue, greaterEqual = greater
+            greaterSymbol = '≤' if greaterEqual else '<'
+            self.displayValues = ['{greater:}s {greaterSymbol} T {lessSymbol} {less}s'.format(greater=timeStr(greaterValue), greaterSymbol=greaterSymbol, lessSymbol=lessSymbol, less=timeStr(lessValue))]
+            if greater >= less:
+                self.valid = False
+        self.contentWidth = self.fontMetrics().width(self.displayValues[0]) + self.hMargin * 2
         self.resizeToContents()
         self.changed.emit()
 
@@ -317,6 +592,8 @@ class FilterContainer(QtWidgets.QFrame):
         'format': FormatFilterWidget, 
         'sampleRate': SampleRateFilterWidget, 
         'sampleRateRange': SampleRateRangeFilterWidget, 
+        'lengthRange': LengthRangeFilterWidget, 
+        'channels': ChannelsFilterWidget, 
         }
     incompatible = [
         set([SampleRateFilterWidget, SampleRateRangeFilterWidget])
@@ -333,7 +610,7 @@ class FilterContainer(QtWidgets.QFrame):
         layout.addWidget(self.innerWidget)
         self.filters = []
 
-    def addFilter(self, filterType):
+    def addFilter(self, filterType, applyFilter=None):
         filterClass = self.filterTypes[filterType]
         for filter in self.filters:
             if isinstance(filter, filterClass):
@@ -342,13 +619,15 @@ class FilterContainer(QtWidgets.QFrame):
         for incompatible in self.incompatible:
             if len(incompatible & filterClasses) > 1:
                 return
-        filter = filterClass(self.innerWidget)
+        filter = filterClass(self.innerWidget, applyFilter)
         filter.deleted.connect(self.filterRemoved)
         filter.resized.connect(self.redrawFilters)
         filter.changed.connect(self.updateFilters)
         self.filters.append(filter)
         filter.show()
         self.redrawFilters()
+        if filter:
+            self.updateFilters()
 
     def filterRemoved(self, filter):
         try:
@@ -363,11 +642,21 @@ class FilterContainer(QtWidgets.QFrame):
 
     def redrawFilters(self):
         delta = 0
-        for btn in self.filters:
-            btn.move(delta, 0)
-            btn.setMaximumHeight(self.height() - 5)
-            btn.setMinimumHeight(self.height() - 5)
-            delta += btn.width()
+        self.aniList = []
+        for filter in self.filters:
+            filter.setMaximumHeight(self.height() - 5)
+            filter.setMinimumHeight(self.height() - 5)
+            if filter.pos():
+                ani = QtCore.QPropertyAnimation(filter, b'pos')
+                ani.setDuration(64)
+                ani.setStartValue(filter.pos())
+                ani.setEndValue(QtCore.QPoint(delta, 0))
+                self.aniList.append(ani)
+            else:
+                filter.move(delta, 0)
+            delta += filter.width()
+        for ani in self.aniList:
+            ani.start()
 
     def resizeEvent(self, event):
         self.redrawFilters()
@@ -419,17 +708,56 @@ class MainFilterWidget(QtWidgets.QWidget):
         self.addFilterBtn.setStyleSheet('QToolButton::menu-indicator {image:none;}')
         self.addFilterBtn.setPopupMode(self.addFilterBtn.InstantPopup)
         layout.addWidget(self.addFilterBtn, 1, 2)
-        filterMenu = QtWidgets.QMenu(self)
-        self.addFilterBtn.setMenu(filterMenu)
-        addFormatAction = QtWidgets.QAction('Formats', self)
-        addFormatAction.triggered.connect(lambda: self.filterWidget.addFilter('format'))
-        addSampleRateAction = QtWidgets.QAction('Sample rates', self)
-        addSampleRateAction.triggered.connect(lambda: self.filterWidget.addFilter('sampleRate'))
-        addSampleRateRangeAction = QtWidgets.QAction('Sample rate range', self)
-        addSampleRateRangeAction.triggered.connect(lambda: self.filterWidget.addFilter('sampleRateRange'))
-        filterMenu.addActions([addFormatAction, addSampleRateAction, addSampleRateRangeAction])
+        self.filterMenu = QtWidgets.QMenu(self)
+        self.filterMenu.aboutToShow.connect(self.checkMenuFilters)
+        self.addFilterBtn.setMenu(self.filterMenu)
+
+        formatMenu = self.filterMenu.addMenu('Formats')
+        formatMenu.menuAction().setData(FormatFilterWidget)
+        formatMenu.addAction('Custom filter', lambda: self.filterWidget.addFilter('format'))
+        formatSeparator = formatMenu.addAction('Format templates')
+        formatSeparator.setSeparator(True)
+        for ext in sorted(soundfile.available_formats().keys()):
+            formatMenu.addAction(soundfile.available_formats()[ext], lambda ext=ext: self.filterWidget.addFilter('format', [ext]))
+
+        addLengthAction = self.filterMenu.addAction('Length', lambda: self.filterWidget.addFilter('lengthRange'))
+        addLengthAction.setData(LengthRangeFilterWidget)
+
+        sampleRateMenu = self.filterMenu.addMenu('Sample rate')
+        sampleRateMenu.menuAction().setData(SampleRateFilterWidget)
+        sampleRateMenu.addAction('Sample rate range', lambda: self.filterWidget.addFilter('sampleRateRange'))
+        sampleRateMenu.addAction('Custom filter', lambda: self.filterWidget.addFilter('sampleRate'))
+        sampleRateSeparator = sampleRateMenu.addAction('Sample rate templates')
+        sampleRateSeparator.setSeparator(True)
+        for sr in sampleRatesList:
+            sampleRateMenu.addAction('{:.1f} kHz'.format(sr/1000.), lambda sr=sr: self.filterWidget.addFilter('sampleRate', [sr]))
+        
+        channelsMenu = self.filterMenu.addMenu('Channels')
+        channelsMenu.menuAction().setData(ChannelsFilterWidget)
+        channelsMenu.addAction('Custom filter', lambda: self.filterWidget.addFilter('channels'))
+        channelsSeparator = channelsMenu.addAction('Channels templates')
+        channelsSeparator.setSeparator(True)
+        for ch in sorted(channelsLabels.keys()):
+            channelsMenu.addAction('{}: {}'.format(ch, channelsLabels[ch]), lambda ch=ch: self.filterWidget.addFilter('channels', [ch]))
 
         layout.setColumnStretch(1, 100)
+
+    def checkMenuFilters(self):
+        existingClasses = [filter.__class__ for filter in self.filterWidget.filters]
+        for action in self.filterMenu.actions():
+            filterData = action.data()
+            if not filterData:
+                continue
+            if filterData in existingClasses:
+                action.setEnabled(False)
+                continue
+            filterClasses = set(existingClasses + [filterData])
+            for incompatible in self.filterWidget.incompatible:
+                if len(incompatible & filterClasses) > 1:
+                    action.setEnabled(False)
+                    break
+            else:
+                action.setEnabled(True)
 
     def updateFilters(self, filterData):
         self.filterData = filterData

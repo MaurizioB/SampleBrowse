@@ -1,8 +1,5 @@
 from PyQt5 import QtCore
-from collections import namedtuple
 import soundfile
-
-rangeData = namedtuple('rangeData', 'greater less')
 
 availableFormats = tuple(f.lower() for f in soundfile.available_formats().keys())
 availableExtensions = tuple('*.' + f for f in availableFormats)
@@ -53,6 +50,7 @@ dbColumns.update({
 sampleViewColumns = browseColumns, dbColumns
 
 ValidRole = QtCore.Qt.UserRole + 1
+DataRole = QtCore.Qt.UserRole + 1
 DeviceRole = ValidRole + 1
 SampleRateRole = DeviceRole + 1
 SampleSizeRole = SampleRateRole + 1
@@ -66,5 +64,4 @@ InfoRole = FilePathRole + 1
 WaveRole = InfoRole + 1
 TagsRole = WaveRole + 1
 PreviewRole = TagsRole + 1
-
 
