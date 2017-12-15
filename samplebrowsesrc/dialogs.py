@@ -27,7 +27,7 @@ class SettingsDialog(QtWidgets.QDialog):
         self.audioDeviceBtn.clicked.connect(self.showAudioSettings)
 
     def showAudioSettings(self):
-        res = AudioSettingsDialog(self, self.parent()).exec_()
+        res = AudioSettingsDialog(self.parent(), self).exec_()
         if not res:
             return
         device, conversion = res
@@ -184,9 +184,12 @@ class AudioDevicesListView(QtWidgets.QListView):
 
 
 class AudioSettingsDialog(QtWidgets.QDialog):
-    def __init__(self, parent):
+    def __init__(self, main, parent=None):
+        if parent is None:
+            parent = main
         QtWidgets.QDialog.__init__(self, parent)
         uic.loadUi('{}/audiosettings.ui'.format(os.path.dirname(utils.__file__)), self)
+        self.main = main
         self.settings = QtCore.QSettings()
 
         self.popup = QtWidgets.QMessageBox(
@@ -240,7 +243,7 @@ class AudioSettingsDialog(QtWidgets.QDialog):
             if device == default:
                 name = '{} (default)'.format(name)
             deviceItem = QtGui.QStandardItem(name)
-            if device == self.parent().player.audioDevice:
+            if device == self.main.player.audioDevice:
                 current = deviceItem
                 utils.setBold(deviceItem)
             deviceItem.setData(device, DeviceRole)
