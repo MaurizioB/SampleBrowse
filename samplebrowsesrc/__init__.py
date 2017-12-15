@@ -475,10 +475,10 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.doMenu()
 
     def doMenu(self):
-        quitAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('application-exit'), 'Quit', self)
+        self.fileMenu.addAction('Show database statistics...', self.showStats)
+        self.fileMenu.addSeparator()
+        quitAction = self.fileMenu.addAction(QtGui.QIcon.fromTheme('application-exit'), 'Quit', self.quit)
         quitAction.setMenuRole(QtWidgets.QAction.QuitRole)
-        quitAction.triggered.connect(self.quit)
-        self.fileMenu.addActions([quitAction])
 
         rightMenuBar = QtWidgets.QMenuBar(self.menubar)
         helpMenu = QtWidgets.QMenu('&?', self.menubar)
@@ -492,6 +492,9 @@ class SampleBrowse(QtWidgets.QMainWindow):
         aboutAction.setMenuRole(QtWidgets.QAction.AboutRole)
         aboutAction.triggered.connect(AboutDialog(self).exec_)
         helpMenu.addActions([settingsAction, utils.menuSeparator(self), aboutAction])
+
+    def showStats(self):
+        StatsDialog(self).exec_()
 
     def showAudioSettings(self):
         res = AudioSettingsDialog(self).exec_()

@@ -1,5 +1,14 @@
 from PyQt5 import QtWidgets
 
+def sizeStr(size):
+    if size < 1024:
+        return '{}B'.format(size)
+    if size < 1048576:
+        return '{:.0f}KB'.format(size/1024)
+    if size < 1073741824:
+        return '{:.0f}MB'.format(size/1048576)
+    return '{:.0f}GB'.format(size/1073741824)
+
 def secondsLeading(seconds, leading=0, trailing=3, trailingAlways=False):
     fmt = '{{:0{}.{}f}}'.format(leading + trailing + 1, trailing)
     return fmt.format(seconds) if trailingAlways else fmt.format(seconds).rstrip('0').rstrip('.')
