@@ -495,7 +495,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         rightMenuBar.addMenu(helpMenu)
         self.menubar.setCornerWidget(rightMenuBar)
 
-        settingsAction = helpMenu.addAction(QtGui.QIcon.fromTheme('preferences-system'), 'Preferences...', SettingsDialog(self).exec_)
+        settingsAction = helpMenu.addAction(QtGui.QIcon.fromTheme('preferences-system'), 'Preferences...', lambda: SettingsDialog(self).exec_())
         settingsAction.setMenuRole(QtWidgets.QAction.PreferencesRole)
         audioSettingsAction = helpMenu.addAction(QtGui.QIcon.fromTheme('preferences-desktop-multimedia'), 'Audio settings...', self.showAudioSettings)
         audioSettingsAction.setMenuRole(QtWidgets.QAction.PreferencesRole)
