@@ -461,11 +461,21 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.currentDbQuery = None
         self.sampleDbUpdated = False
 
-        self.browse()
-        for column, visible in browseColumns.items():
-            self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
+        startupView = self.settings.value('startupView', 0, type=int)
+        self.browseSelectGroup.button(startupView).setChecked(True)
+        self.toggleBrowser(startupView)
+#        self.browse()
+#        for column, visible in browseColumns.items():
+#            self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
+
         self.mainSplitter.setStretchFactor(0, 8)
         self.mainSplitter.setStretchFactor(1, 16)
+
+        defaultVolumeMode = self.settings.value('defaultVolumeMode', 0, type=int)
+        if defaultVolumeMode == 1:
+            self.volumeSlider.setValue(self.settings.value('previousVolume', 100, type=int))
+        elif defaultVolumeMode == 2:
+            self.volumeSlider.setValue(self.settings.value('customVolume', 100, type=int))
 
         self.shown = False
 
@@ -485,13 +495,13 @@ class SampleBrowse(QtWidgets.QMainWindow):
         rightMenuBar.addMenu(helpMenu)
         self.menubar.setCornerWidget(rightMenuBar)
 
-        settingsAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('preferences-desktop-multimedia'), 'Audio settings...', self)
+        settingsAction = helpMenu.addAction(QtGui.QIcon.fromTheme('preferences-system'), 'Preferences...', SettingsDialog(self).exec_)
         settingsAction.setMenuRole(QtWidgets.QAction.PreferencesRole)
-        settingsAction.triggered.connect(self.showAudioSettings)
-        aboutAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('help-about'), 'About...', self)
+        audioSettingsAction = helpMenu.addAction(QtGui.QIcon.fromTheme('preferences-desktop-multimedia'), 'Audio settings...', self.showAudioSettings)
+        audioSettingsAction.setMenuRole(QtWidgets.QAction.PreferencesRole)
+        helpMenu.addSeparator()
+        aboutAction = helpMenu.addAction(QtGui.QIcon.fromTheme('help-about'), 'About...', AboutDialog(self).exec_)
         aboutAction.setMenuRole(QtWidgets.QAction.AboutRole)
-        aboutAction.triggered.connect(AboutDialog(self).exec_)
-        helpMenu.addActions([settingsAction, utils.menuSeparator(self), aboutAction])
 
     def showStats(self):
         StatsDialog(self).exec_()
@@ -504,7 +514,12 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.player.setAudioDevice(device)
         self.player.setSampleRateConversion(conversion)
 
+    def closeEvent(self, event):
+        self.quit()
+
     def quit(self):
+        self.settings.setValue('previousVolume', self.volumeSlider.value())
+        self.settings.sync()
         self.dbConn.commit()
         self.dbConn.close()
         QtWidgets.QApplication.quit()

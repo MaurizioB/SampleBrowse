@@ -12,6 +12,50 @@ from samplebrowsesrc.info import __version__, __author__, __description__, __cod
 audioDevice = namedtuple('audioDevice', 'device name sampleRates sampleSizes channels')
 
 
+class SettingsDialog(QtWidgets.QDialog):
+    def __init__(self, parent):
+        QtWidgets.QDialog.__init__(self, parent)
+        uic.loadUi('{}/settings.ui'.format(os.path.dirname(utils.__file__)), self)
+        self.settings = QtCore.QSettings()
+
+        self.startupViewGroup.setId(self.startupFsRadio, 0)
+        self.startupViewGroup.setId(self.startupDbRadio, 1)
+
+        self.defaultVolumeGroup.setId(self.defaultVolume100Radio, 0)
+        self.defaultVolumeGroup.setId(self.defaultVolumePreviousRadio, 1)
+        self.defaultVolumeGroup.setId(self.defaultVolumeCustomRadio, 2)
+        self.audioDeviceBtn.clicked.connect(self.showAudioSettings)
+
+    def showAudioSettings(self):
+        res = AudioSettingsDialog(self, self.parent()).exec_()
+        if not res:
+            return
+        device, conversion = res
+        self.parent().player.setAudioDevice(device)
+        self.parent().player.setSampleRateConversion(conversion)
+
+    def exec_(self):
+        startupView = self.settings.value('startupView', 0, type=int)
+        self.startupViewGroup.button(startupView).setChecked(True)
+
+        dataDir = QtCore.QDir(QtCore.QStandardPaths.standardLocations(QtCore.QStandardPaths.AppDataLocation)[0])
+        dbFile = QtCore.QFile(dataDir.filePath('sample.sqlite'))
+        self.dbPathEdit.setText(dbFile.fileName())
+
+        defaultVolumeMode = self.settings.value('defaultVolumeMode', 0, type=int)
+        self.defaultVolumeGroup.button(defaultVolumeMode).setChecked(True)
+        customVolume = self.settings.value('customVolume', self.parent().volumeSlider.value(), type=int)
+        self.defaultVolumeCustomSpin.setValue(customVolume)
+
+        res = QtWidgets.QDialog.exec_(self)
+        if not res:
+            return
+        self.settings.setValue('startupView', self.startupViewGroup.checkedId())
+        self.settings.setValue('defaultVolumeMode', self.defaultVolumeGroup.checkedId())
+        self.settings.setValue('customVolume', self.defaultVolumeCustomSpin.value())
+        self.settings.sync()
+
+
 class StatsDialog(QtWidgets.QDialog):
     def __init__(self, parent):
         QtWidgets.QDialog.__init__(self, parent)
