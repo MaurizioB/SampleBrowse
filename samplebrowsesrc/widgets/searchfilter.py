@@ -669,6 +669,9 @@ class FilterContainer(QtWidgets.QFrame):
             filterData.append((filter.field, filter.data()))
         self.filtersChanged.emit(filterData)
 
+    def minimumSizeHint(self):
+        return QtCore.QSize(480, self.fontMetrics().height() + 8)
+
 
 class FilterLineEdit(QtWidgets.QLineEdit):
     def __init__(self, *args, **kwargs):
@@ -765,5 +768,4 @@ class MainFilterWidget(QtWidgets.QWidget):
 
     def textSearchChanged(self, text):
         self.filtersChanged.emit([(fileNameColumn, text)] + self.filterData)
-
 
