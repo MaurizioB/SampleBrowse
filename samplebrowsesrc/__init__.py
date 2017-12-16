@@ -41,17 +41,18 @@ class WaveScene(QtWidgets.QGraphicsScene):
     waveGrad.setSpread(waveGrad.RepeatSpread)
 #    waveGrad.setCoordinateMode(waveGrad.ObjectBoundingMode)
     waveGrad.setColorAt(0.0, QtCore.Qt.red)
-    waveGrad.setColorAt(.1, _orange)
+    waveGrad.setColorAt(.15, _orange)
     waveGrad.setColorAt(.5, QtCore.Qt.darkGreen)
-    waveGrad.setColorAt(.9, _orange)
+    waveGrad.setColorAt(.85, _orange)
     waveGrad.setColorAt(1, QtCore.Qt.red)
     waveBrush = QtGui.QBrush(waveGrad)
+    wavePen = QtGui.QPen(QtCore.Qt.NoPen)
+    zeroPen = QtGui.QPen(QtCore.Qt.darkGray, .5)
+    zeroPen.setCosmetic(True)
 
     def __init__(self, *args, **kwargs):
         QtWidgets.QGraphicsScene.__init__(self, *args, **kwargs)
         self.waveRect = QtCore.QRectF()
-        self.wavePen = QtGui.QPen(QtCore.Qt.NoPen)
-        self.zeroPen = QtGui.QPen(QtCore.Qt.lightGray)
 
     def showPlayhead(self):
         self.playhead.show()
@@ -82,8 +83,8 @@ class WaveScene(QtWidgets.QGraphicsScene):
         path.lineTo(pos, 0)
         path.closeSubpath()
         leftPath = self.addPath(path, self.wavePen, self.waveBrush)
-        leftLine = self.addLine(0, .5, leftPath.boundingRect().width(), .5, self.zeroPen)
-        leftLine.setFlags(leftLine.flags() ^ leftLine.ItemIgnoresTransformations)
+        leftLine = self.addLine(0, 0, leftPath.boundingRect().width(), 0, self.zeroPen)
+#        leftLine.setFlags(leftLine.flags() ^ leftLine.ItemIgnoresTransformations)
         if not right:
             self.waveRect = QtCore.QRectF(0, -1, leftPath.boundingRect().width(), 2)
             return
@@ -104,8 +105,8 @@ class WaveScene(QtWidgets.QGraphicsScene):
         path.closeSubpath()
         path.translate(0, 2)
         rightPath = self.addPath(path, self.wavePen, self.waveBrush)
-        rightLine = self.addLine(0, 53.5, rightPath.boundingRect().width(), 53.5, self.zeroPen)
-        rightLine.setFlags(rightLine.flags() ^ rightLine.ItemIgnoresTransformations)
+        rightLine = self.addLine(0, 2, rightPath.boundingRect().width(), 2, self.zeroPen)
+#        rightLine.setFlags(rightLine.flags() ^ rightLine.ItemIgnoresTransformations)
         leftText = self.addText('L')
         leftText.setY(-1)
         leftText.setFlag(leftText.ItemIgnoresTransformations, True)
