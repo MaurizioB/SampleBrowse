@@ -141,7 +141,7 @@ class BaseSelectionWidget(QtWidgets.QWidget):
     closed = QtCore.pyqtSignal(object)
 
     def mousePressEvent(self, event):
-        if event.pos() not in self.geometry():
+        if event.pos() not in self.rect():
             self.closed.emit(self)
             event.accept()
             return
