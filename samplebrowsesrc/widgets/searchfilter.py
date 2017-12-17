@@ -59,6 +59,7 @@ class FilterWidget(QtWidgets.QWidget):
         self.context = context
         self.editorClass = editorClass
         self.setFilter(filter)
+        self.editor = None
 
     def data(self):
         return self.values if self.valid else None
@@ -82,7 +83,11 @@ class FilterWidget(QtWidgets.QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton:
-            self.editFilter()
+            try:
+                if self.editor.isVisible():
+                    self.editor.hide()
+            except:
+                self.editFilter()
 
     def editFilter(self):
         editor = self.editorClass(self)
@@ -90,6 +95,7 @@ class FilterWidget(QtWidgets.QWidget):
         editor.closed.connect(lambda: [editor.changed.disconnect(), editor.deleteLater()])
 #        editor.move(self.mapToGlobal(QtCore.QPoint(0, self.height())))
         editor.show()
+        self.editor = editor
 
     def paintPrimitive(self):
         qp = QtGui.QPainter()
