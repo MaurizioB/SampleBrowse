@@ -58,8 +58,8 @@ class FilterWidget(QtWidgets.QWidget):
         self.contentWidth = 0
         self.context = context
         self.editorClass = editorClass
+        self.editorVisible = False
         self.setFilter(filter)
-        self.editor = None
 
     def data(self):
         return self.values if self.valid else None
@@ -82,20 +82,21 @@ class FilterWidget(QtWidgets.QWidget):
         self.changed.emit()
 
     def mousePressEvent(self, event):
-        if event.button() == QtCore.Qt.LeftButton:
-            try:
-                if self.editor.isVisible():
-                    self.editor.hide()
-            except:
-                self.editFilter()
+        if event.button() == QtCore.Qt.LeftButton and not self.editorVisible:
+            self.editFilter()
 
     def editFilter(self):
         editor = self.editorClass(self)
         editor.changed.connect(self.setFilter)
-        editor.closed.connect(lambda: [editor.changed.disconnect(), editor.deleteLater()])
+        editor.closed.connect(self.closeEditor)
 #        editor.move(self.mapToGlobal(QtCore.QPoint(0, self.height())))
         editor.show()
-        self.editor = editor
+        self.editorVisible = True
+
+    def closeEditor(self, editor):
+        editor.changed.disconnect()
+        editor.deleteLater()
+        self.editorVisible = False
 
     def paintPrimitive(self):
         qp = QtGui.QPainter()
@@ -137,7 +138,14 @@ class FilterWidget(QtWidgets.QWidget):
 
 class BaseSelectionWidget(QtWidgets.QWidget):
     changed = QtCore.pyqtSignal(object)
-    closed = QtCore.pyqtSignal()
+    closed = QtCore.pyqtSignal(object)
+
+    def mousePressEvent(self, event):
+        if event.pos() not in self.geometry():
+            self.closed.emit(self)
+            event.accept()
+            return
+        QtWidgets.QWidget.mousePressEvent(self, event)
 
     def showEvent(self, event):
         desktopGeo = QtWidgets.QDesktopWidget().screenGeometry(self.parent())
@@ -191,9 +199,6 @@ class ListSelectionWidget(BaseSelectionWidget):
             if item.checkState():
                 data.append(item.data())
         self.changed.emit(data)
-
-    def hideEvent(self, event):
-        self.closed.emit()
 
 
 class FormatFilterWidget(FilterWidget):
@@ -318,9 +323,6 @@ class ComboRangeSelectionWidget(BaseSelectionWidget):
         self.greaterOrEqualChk.setEnabled(greater)
         self.greaterCombo.setEnabled(greater)
         self.changed.emit((greaterValue, greaterEqual) if greater else None, (lessValue, lessEqual) if less else None)
-
-    def hideEvent(self, event):
-        self.closed.emit()
 
 
 class SampleRateRangeFilterWidget(FilterWidget):
@@ -545,9 +547,6 @@ class SpinRangeSelectionWidget(BaseSelectionWidget):
         self.greaterOrEqualChk.setEnabled(greater)
         self.greaterSpin.setEnabled(greater)
         self.changed.emit((greaterValue, greaterEqual) if greater else None, (lessValue, lessEqual) if less else None)
-
-    def hideEvent(self, event):
-        self.closed.emit()
 
 
 class LengthRangeFilterWidget(FilterWidget):
