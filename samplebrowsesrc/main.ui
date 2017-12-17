@@ -211,7 +211,11 @@
      </widget>
     </item>
     <item row="2" column="0">
-     <widget class="AudioInfoTabWidget" name="audioInfoTabWidget" native="true"/>
+     <widget class="AudioInfoTabWidget" name="audioInfoTabWidget">
+      <property name="lengthFormat" stdset="0">
+       <enum>AudioInfoTabWidget::Full</enum>
+      </property>
+     </widget>
     </item>
    </layout>
   </widget>

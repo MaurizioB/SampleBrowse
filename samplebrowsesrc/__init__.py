@@ -17,23 +17,6 @@ from samplebrowsesrc.dialogs import *
 from samplebrowsesrc.classes import *
 from samplebrowsesrc.utils import *
 
-class EllipsisLabel(QtWidgets.QLabel):
-    def __init__(self, *args, **kwargs):
-        QtWidgets.QLabel.__init__(self, *args, **kwargs)
-        self._text = self.text()
-
-    def minimumSizeHint(self):
-        default = QtWidgets.QLabel.minimumSizeHint(self)
-        return QtCore.QSize(10, default.height())
-
-    def setText(self, text):
-        self._text = text
-        QtWidgets.QLabel.setText(self, text)
-
-    def resizeEvent(self, event):
-        QtWidgets.QLabel.setText(self, self.fontMetrics().elidedText(self._text, QtCore.Qt.ElideMiddle, self.width()))
-
-
 class WaveScene(QtWidgets.QGraphicsScene):
     _orange = QtGui.QColor()
     _orange.setNamedColor('orangered')
@@ -49,10 +32,14 @@ class WaveScene(QtWidgets.QGraphicsScene):
     wavePen = QtGui.QPen(QtCore.Qt.NoPen)
     zeroPen = QtGui.QPen(QtCore.Qt.darkGray, .5)
     zeroPen.setCosmetic(True)
+    playheadPen = QtGui.QPen(QtCore.Qt.black, .5)
+    playheadPen.setCosmetic(True)
 
     def __init__(self, *args, **kwargs):
         QtWidgets.QGraphicsScene.__init__(self, *args, **kwargs)
         self.waveRect = QtCore.QRectF()
+        self.realStep = 0
+        self.sampleRate = 0
 
     def showPlayhead(self):
         self.playhead.show()
@@ -60,53 +47,72 @@ class WaveScene(QtWidgets.QGraphicsScene):
     def hidePlayhead(self):
         self.playhead.hide()
 
-    def movePlayhead(self, pos):
-        self.playhead.setX(pos)
+    def resetPlayhead(self, sampleRate):
+        self.playhead.setX(0)
+        self.sampleRate = sampleRate
+#        self.playhead.setX(.05 * sampleRate / self.realStep)
+#        print(sampleRate * .05 / self.realStep)
 
-    def drawWave(self, data, dtype=None):
-        left, right = data
+    def movePlayhead(self, secs):
+        self.playhead.setX((secs) * self.sampleRate / self.realStep)
+#        self.playhead.setX(self.playhead.x() + sampleRate * .05 / self.realStep)
+
+    def drawWave(self, waveData, width):
         self.clear()
-        self.playhead = self.addLine(-10, -100, -10, 100)
-        self.playhead.setFlags(self.playhead.flags() ^ self.playhead.ItemIgnoresTransformations)
+        self.playhead = self.addLine(0, -100, 0, 100, self.playheadPen)
+#        self.playhead.setFlags(self.playhead.flags() ^ self.playhead.ItemIgnoresTransformations)
+
+        samples, channels = waveData.shape
+        #resolution is 5 samples per scene pixel
+        step = samples//(width*5)
+#        self.realStep = samples/(width*5)
+        print(step, samples/(width*5))
+        self.realStep = step
+
         path = QtGui.QPainterPath()
-        pos = 0
         path.moveTo(0, 0)
-        for value in left[0]:
+        pos = 0
+        leftData = waveData[:, 0]
+        leftMin = np.amin(np.pad(leftData, (0, step - leftData.size % step), mode='constant', constant_values=0).reshape(-1, step), axis=1)
+        leftMax = np.amax(np.pad(leftData, (0, step - leftData.size % step), mode='constant', constant_values=0).reshape(-1, step), axis=1)
+        for value in leftMax:
             path.lineTo(pos, value)
-            pos += 10
+            pos += 1
         path.lineTo(pos, 0)
         path.moveTo(0, 0)
         pos = 0
-        for value in left[1]:
+        for value in leftMin:
             path.lineTo(pos, value)
-            pos += 10
+            pos += 1
         path.lineTo(pos, 0)
         path.closeSubpath()
         leftPath = self.addPath(path, self.wavePen, self.waveBrush)
-        leftLine = self.addLine(0, 0, leftPath.boundingRect().width(), 0, self.zeroPen)
-#        leftLine.setFlags(leftLine.flags() ^ leftLine.ItemIgnoresTransformations)
-        if not right:
+        self.addLine(0, 0, leftPath.boundingRect().width(), 0, self.zeroPen)
+        if channels == 1:
             self.waveRect = QtCore.QRectF(0, -1, leftPath.boundingRect().width(), 2)
             return
 
         path = QtGui.QPainterPath()
-        pos = 0
         path.moveTo(0, 0)
-        for value in right[0]:
+        pos = 0
+        rightData = waveData[:, 1]
+        rightMin = np.amin(np.pad(rightData, (0, step - rightData.size % step), mode='constant', constant_values=0).reshape(-1, step), axis=1)
+        rightMax = np.amax(np.pad(rightData, (0, step - rightData.size % step), mode='constant', constant_values=0).reshape(-1, step), axis=1)
+        for value in rightMax:
             path.lineTo(pos, value)
-            pos += 10
+            pos += 1
         path.lineTo(pos, 0)
         path.moveTo(0, 0)
         pos = 0
-        for value in right[1]:
+        for value in rightMin:
             path.lineTo(pos, value)
-            pos += 10
+            pos += 1
         path.lineTo(pos, 0)
         path.closeSubpath()
         path.translate(0, 2)
         rightPath = self.addPath(path, self.wavePen, self.waveBrush)
-        rightLine = self.addLine(0, 2, rightPath.boundingRect().width(), 2, self.zeroPen)
-#        rightLine.setFlags(rightLine.flags() ^ rightLine.ItemIgnoresTransformations)
+        self.addLine(0, 2, rightPath.boundingRect().width(), 2, self.zeroPen)
+
         leftText = self.addText('L')
         leftText.setY(-1)
         leftText.setFlag(leftText.ItemIgnoresTransformations, True)
@@ -728,7 +734,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
         model = fileIndex.model()
         item = model.itemFromIndex(fileIndex)
         utils.setItalic(item, not readable)
-        self.audioInfoTabWidget.clear()
+        if not readable:
+            self.audioInfoTabWidget.clear()
     
     def browse(self, path=None):
         if path is None:
@@ -1251,15 +1258,15 @@ class SampleBrowse(QtWidgets.QMainWindow):
         fileItem = self.sampleView.model().itemFromIndex(fileIndex)
         info = fileIndex.data(InfoRole)
         waveData = fileItem.data(WaveRole)
-        self.waveScene.movePlayhead(0)
+        self.waveScene.resetPlayhead(info.samplerate)
         self.player.play(waveData, info)
         fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-stop'))
 
     def movePlayhead(self):
-#        bytesInBuffer = self.output.bufferSize() - self.output.bytesFree()
-#        usInBuffer = 1000000. * bytesInBuffer / (2 * self.sampleSize / 8) / self.sampleRate
-#        self.waveScene.movePlayhead((self.output.processedUSecs() - usInBuffer) / 200)
-        self.waveScene.movePlayhead(self.waveScene.playhead.x() + self.player.sampleRate / 200.)
+#        bytesInBuffer = self.player.output.bufferSize() - self.player.output.bytesFree()
+#        usInBuffer = 1000000. * bytesInBuffer / (2 * self.player.sampleSize / 8) / self.player.sampleRate
+#        self.waveScene.movePlayhead((self.player.output.processedUSecs() - usInBuffer) / 1000000)
+        self.waveScene.movePlayhead(self.player.output.processedUSecs() / 1000000)
 
     def stopped(self):
         if self.currentSampleIndex:
@@ -1326,35 +1333,22 @@ class SampleBrowse(QtWidgets.QMainWindow):
             tags = None
         self.audioInfoTabWidget.setInfo(fileIndex.data(), info, tags)
 
-        previewData = fileIndex.data(PreviewRole)
-        if not previewData:
-            waveData = fileIndex.data(WaveRole)
-            if waveData is None:
-                fileItem = self.sampleView.model().itemFromIndex(fileIndex)
-                waveData = self.getWaveData(fileItem.data(FilePathRole))
-                if not len(waveData):
-                    return False
-                fileItem.setData(waveData, WaveRole)
-            ratio = 100
-            if info.channels > 1:
-                left = waveData[:, 0]
-                leftMin = np.amin(np.pad(left, (0, ratio - left.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
-                leftMax = np.amax(np.pad(left, (0, ratio - left.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
-                right = waveData[:, 1]
-                rightMin = np.amin(np.pad(right, (0, ratio - right.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
-                rightMax = np.amax(np.pad(right, (0, ratio - right.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
-                rightData = rightMax, rightMin
-            else:
-                leftMin = np.amin(np.pad(waveData, (0, ratio - waveData.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
-                leftMax = np.amax(np.pad(waveData, (0, ratio - waveData.size % ratio), mode='constant', constant_values=0).reshape(-1, ratio), axis=1)
-                rightData = None
-            leftData = leftMax, leftMin
-            previewData = leftData, rightData
-            fileItem.setData(previewData, PreviewRole)
-        self.waveScene.drawWave(previewData)
-        self.waveView.fitInView(self.waveScene.waveRect)
         self.currentShownSampleIndex = fileIndex
+
+        self.drawWave(fileIndex)
+
         return True
+
+    def drawWave(self, fileIndex):
+        waveData = fileIndex.data(WaveRole)
+        if waveData is None:
+            fileItem = self.sampleView.model().itemFromIndex(fileIndex)
+            waveData = self.getWaveData(fileItem.data(FilePathRole))
+            if not len(waveData):
+                return False
+            fileItem.setData(waveData, WaveRole)
+        self.waveScene.drawWave(waveData, self.waveView.viewport().rect().width())
+        self.waveView.fitInView(self.waveScene.waveRect)
 
     def resizeEvent(self, event):
         self.waveView.fitInView(self.waveScene.waveRect)
