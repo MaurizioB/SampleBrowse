@@ -332,7 +332,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
         self.fsSplitter = AdvancedSplitter(QtCore.Qt.Vertical)
         self.browserStackedLayout.addWidget(self.fsSplitter)
-        self.fsView = QtWidgets.QTreeView()
+        self.fsView = FsTreeView()
         self.fsSplitter.addWidget(self.fsView, collapsible=False)
         self.fsView.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.fsView.setHeaderHidden(True)
@@ -564,10 +564,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
     def showEvent(self, event):
         if not self.shown:
             QtCore.QTimer.singleShot(
-                1000, 
-                lambda: self.fsView.scrollTo(
-                    self.fsProxyModel.mapFromSource(self.fsModel.index(QtCore.QDir.currentPath())), self.fsView.PositionAtTop
-                    )
+                0, 
+                lambda: self.fsView.scrollToPath(QtCore.QDir.currentPath())
                 )
             self.resize(640, 480)
             self.shown = True
@@ -702,9 +700,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         menu.addActions([scrollToAction, utils.menuSeparator(menu), removeAction])
         res = menu.exec_(self.favouritesTable.viewport().mapToGlobal(event.pos()))
         if res == scrollToAction:
-            dirIndex = self.fsProxyModel.mapFromSource(self.fsModel.index(dirPath))
-            self.fsView.setCurrentIndex(dirIndex)
-            self.fsView.scrollTo(dirIndex, self.fsView.PositionAtTop)
+            self.fsView.scrollToPath(dirPath)
         elif res == removeAction:
             self.settings.beginGroup('Favourites')
             for fav in self.settings.childKeys():
