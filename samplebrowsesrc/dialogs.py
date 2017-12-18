@@ -528,9 +528,9 @@ class ImportDialog(QtWidgets.QDialog):
 
 
 class ImportDialogScan(ImportDialog):
-    def __init__(self, parent, dirList, scanMode, formats, sampleRates, channels):
+    def __init__(self, parent, dirList, scanMode, formats, sampleRates, channels, scanLimits):
         ImportDialog.__init__(self, parent)
-        self.crawler = Crawler(dirList, scanMode, formats, sampleRates, channels)
+        self.crawler = Crawler(dirList, scanMode, formats, sampleRates, channels, scanLimits)
         self.crawlerThread = QtCore.QThread()
         self.crawler.moveToThread(self.crawlerThread)
         self.crawlerThread.started.connect(self.crawler.run)
@@ -550,9 +550,11 @@ class ImportDialogScan(ImportDialog):
         fileItem = QtGui.QStandardItem(fileInfo.fileName())
         fileItem.setData(fileInfo.absoluteFilePath(), FilePathRole)
         fileItem.setData(info, InfoRole)
+        fileItem.setToolTip(fileInfo.fileName())
         fileItem.setCheckable(True)
         fileItem.setCheckState(QtCore.Qt.Checked)
         dirItem = QtGui.QStandardItem(fileInfo.absolutePath())
+        dirItem.setToolTip(fileInfo.absoluteFilePath())
         lengthItem = QtGui.QStandardItem('{:.3f}'.format(float(info.frames) / info.samplerate))
         formatItem = QtGui.QStandardItem(info.format)
         rateItem = QtGui.QStandardItem(str(info.samplerate))
@@ -575,7 +577,7 @@ class ImportDialogScan(ImportDialog):
             self.sampleProxyModel.dataChanged.connect(self.checkChecked)
         except:
             pass
-        self.sampleView.resizeColumnsToContents()
+#        self.sampleView.resizeColumnsToContents()
         found = str(self.sampleModel.rowCount())
         self.totalLbl.setText(found)
         self.selectedLbl.setText(found)
@@ -590,9 +592,9 @@ class ImportDialogScan(ImportDialog):
 
 
 class ImportDialogScanDnD(ImportDialogScan):
-    def __init__(self, parent, dirList, fileList, scanMode, formats, sampleRates, channels, tag):
+    def __init__(self, parent, dirList, fileList, scanMode, formats, sampleRates, channels, scanLimits, tag):
         if dirList:
-            ImportDialogScan.__init__(self, parent, dirList, scanMode, formats, sampleRates, channels)
+            ImportDialogScan.__init__(self, parent, dirList, scanMode, formats, sampleRates, channels, scanLimits)
             self.defaultTags = [tag]
         else:
             ImportDialog.__init__(self, parent)
@@ -608,9 +610,11 @@ class ImportDialogScanDnD(ImportDialogScan):
             fileItem = QtGui.QStandardItem(fileInfo.fileName())
             fileItem.setData(filePath, FilePathRole)
             fileItem.setData(info, InfoRole)
+            fileItem.setToolTip(fileInfo.fileName())
             fileItem.setCheckable(True)
             fileItem.setCheckState(QtCore.Qt.Checked)
             dirItem = QtGui.QStandardItem(fileInfo.absolutePath())
+            dirItem.setToolTip(fileInfo.absoluteFilePath())
             lengthItem = QtGui.QStandardItem('{:.3f}'.format(float(info.frames) / info.samplerate))
             formatItem = QtGui.QStandardItem(info.format)
             rateItem = QtGui.QStandardItem(str(info.samplerate))
@@ -629,10 +633,10 @@ class ImportDialogScanDnD(ImportDialogScan):
             return ImportDialog.exec_(self)
 
 
-class SampleScanDialog(QtWidgets.QDialog):
+class ScanOptionsDialog(QtWidgets.QDialog):
     def __init__(self, parent, dirName=None):
         QtWidgets.QDialog.__init__(self, parent)
-        uic.loadUi('{}/directoryscan.ui'.format(os.path.dirname(utils.__file__)), self)
+        uic.loadUi('{}/scanoptions.ui'.format(os.path.dirname(utils.__file__)), self)
         if dirName:
             self.dirPathEdit.setText(dirName)
         else:
@@ -665,6 +669,24 @@ class SampleScanDialog(QtWidgets.QDialog):
 
         self.okBtn = self.buttonBox.button(self.buttonBox.Ok)
         self.okBtn.setText('Scan')
+
+        self.currentSizeBiggerUnit = self.sizeBiggerCombo.currentIndex()
+        self.currentSizeSmallerUnit = self.sizeSmallerCombo.currentIndex()
+        self.sizeBiggerChk.toggled.connect(lambda state: self.checkSizeIntegrity('Smaller') if state else None)
+        self.sizeBiggerSpin.valueChanged.connect(lambda *args: self.checkSizeIntegrity('Bigger'))
+        self.sizeBiggerCombo.currentIndexChanged.connect(lambda *args: self.checkSizeIntegrity('Bigger'))
+        self.sizeSmallerChk.toggled.connect(lambda state: self.checkSizeIntegrity('Bigger') if state else None)
+        self.sizeSmallerSpin.valueChanged.connect(lambda *args: self.checkSizeIntegrity('Smaller'))
+        self.sizeSmallerCombo.currentIndexChanged.connect(lambda *args: self.checkSizeIntegrity('Smaller'))
+
+        self.currentLengthLongerUnit = self.lengthLongerCombo.currentIndex()
+        self.currentLengthShorterUnit = self.lengthShorterCombo.currentIndex()
+        self.lengthLongerChk.toggled.connect(lambda state: self.checkLengthIntegrity('Shorter') if state else None)
+        self.lengthLongerSpin.valueChanged.connect(lambda * args: self.checkLengthIntegrity('Longer'))
+        self.lengthLongerCombo.currentIndexChanged.connect(lambda * args: self.checkLengthIntegrity('Longer'))
+        self.lengthShorterChk.toggled.connect(lambda state: self.checkLengthIntegrity('Longer') if state else None)
+        self.lengthShorterSpin.valueChanged.connect(lambda * args: self.checkLengthIntegrity('Shorter'))
+        self.lengthShorterCombo.currentIndexChanged.connect(lambda * args: self.checkLengthIntegrity('Shorter'))
 
     def checkAllFormatsFromModel(self, *args):
         self.allFormatsChk.blockSignals(True)
@@ -724,6 +746,81 @@ class SampleScanDialog(QtWidgets.QDialog):
         else:
             self.okBtn.setEnabled(False)
 
+    def checkSizeIntegrity(self, mode):
+        spin = getattr(self, 'size{}Spin'.format(mode))
+        combo = getattr(self, 'size{}Combo'.format(mode))
+        currentSizeUnit = getattr(self, 'currentSize{}Unit'.format(mode))
+        if combo.currentIndex() == currentSizeUnit:
+            if combo.currentIndex == 2:
+                spin.setDecimals(0)
+            else:
+                spin.setDecimals(2)
+        else:
+            newSizeUnit = combo.currentIndex()
+            newSpinValue = spin.value() * (1024**(newSizeUnit - currentSizeUnit))
+            spin.blockSignals(True)
+            spin.setValue(newSpinValue)
+            spin.blockSignals(False)
+            setattr(self, 'currentSize{}Unit'.format(mode), newSizeUnit)
+
+        newValue = spin.value() * 1024 ** (2 - combo.currentIndex())
+        if mode=='Smaller':
+            altMode = 'Bigger'
+            cmp = '__le__'
+            diff = -1
+        else:
+            altMode = 'Smaller'
+            cmp = '__ge__'
+            diff = 1
+#        if not getattr(self, 'size{}Chk'.format(altMode)).isChecked():
+#            return
+        altSpin = getattr(self, 'size{}Spin'.format(altMode))
+        altCombo = getattr(self, 'size{}Combo'.format(altMode))
+        altValue = altSpin.value() * 1024 ** (2- altCombo.currentIndex())
+        if getattr(newValue, cmp)(altValue):
+            altCombo.blockSignals(True)
+            altCombo.setCurrentIndex(currentSizeUnit)
+            altCombo.blockSignals(False)
+            altSpin.blockSignals(True)
+            altSpin.setValue(spin.value() + diff)
+            altSpin.blockSignals(False)
+            setattr(self, 'currentSize{}Unit'.format(altMode), currentSizeUnit)
+
+    def checkLengthIntegrity(self, mode):
+        spin = getattr(self, 'length{}Spin'.format(mode))
+        combo = getattr(self, 'length{}Combo'.format(mode))
+        currentSizeUnit = getattr(self, 'currentLength{}Unit'.format(mode))
+        if combo.currentIndex() != currentSizeUnit:
+            newSizeUnit = combo.currentIndex()
+            newSpinValue = spin.value() * (60**(newSizeUnit - currentSizeUnit))
+            spin.blockSignals(True)
+            spin.setValue(newSpinValue)
+            spin.blockSignals(False)
+            setattr(self, 'currentLength{}Unit'.format(mode), newSizeUnit)
+
+        newValue = spin.value() * 60 ** (1 - combo.currentIndex())
+        if mode=='Shorter':
+            altMode = 'Longer'
+            cmp = '__le__'
+            diff = -1
+        else:
+            altMode = 'Shorter'
+            cmp = '__ge__'
+            diff = 1
+#        if not getattr(self, 'length{}Chk'.format(altMode)).isChecked():
+#            return
+        altSpin = getattr(self, 'length{}Spin'.format(altMode))
+        altCombo = getattr(self, 'length{}Combo'.format(altMode))
+        altValue = altSpin.value() * 60 ** (1- altCombo.currentIndex())
+        if getattr(newValue, cmp)(altValue):
+            altCombo.blockSignals(True)
+            altCombo.setCurrentIndex(currentSizeUnit)
+            altCombo.blockSignals(False)
+            altSpin.blockSignals(True)
+            altSpin.setValue(spin.value() + diff)
+            altSpin.blockSignals(False)
+            setattr(self, 'currentLength{}Unit'.format(altMode), currentSizeUnit)
+
     def browse(self):
         filePath = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select directory', self.dirPathEdit.text())
         if filePath:
@@ -748,6 +845,43 @@ class SampleScanDialog(QtWidgets.QDialog):
             if item.checkState():
                 sampleRates.append(item.data(FormatRole))
         return sampleRates
+
+    def getScanLimits(self):
+        if self.sizeBiggerChk.isChecked():
+            bigger = self.sizeBiggerSpin.value()
+            if self.sizeBiggerCombo.currentIndex() == 0:
+                bigger *= 1048576
+            elif self.sizeBiggerCombo.currentIndex() == 1:
+                bigger *= 1024
+            bigger = int(bigger)
+        else:
+            bigger = None
+
+        if self.sizeSmallerChk.isChecked():
+            smaller = self.sizeSmallerSpin.value()
+            if self.sizeSmallerCombo.currentIndex() == 0:
+                smaller *= 1048576
+            elif self.sizeSmallerCombo.currentIndex() == 1:
+                smaller *= 1024
+            smaller = int(smaller)
+        else:
+            smaller = None
+
+        if self.lengthLongerChk.isChecked():
+            longer = self.lengthLongerSpin.value()
+            if self.lengthLongerCombo.currentIndex() == 0:
+                longer *= 60
+        else:
+            longer = None
+
+        if self.lengthShorterChk.isChecked():
+            shorter = self.lengthShorterSpin.value()
+            if self.lengthShorterCombo.currentIndex() == 0:
+                shorter *= 60
+        else:
+            shorter = None
+
+        return bigger, smaller, longer, shorter
 
 
 class AddSamplesWithTagDialog(QtWidgets.QDialog):

@@ -636,15 +636,16 @@ class SampleBrowse(QtWidgets.QMainWindow):
             self.sampleScan(dirPath)
 
     def sampleScan(self, dirPath=QtCore.QDir('.').absolutePath()):
-        scanDialog = SampleScanDialog(self, dirPath)
-        if not scanDialog.exec_():
+        scanOptionsDialog = ScanOptionsDialog(self, dirPath)
+        if not scanOptionsDialog.exec_():
             return
-        dirPath = scanDialog.dirPathEdit.text()
-        scanMode = scanDialog.scanModeCombo.currentIndex()
-        formats = scanDialog.getFormats()
-        sampleRates = scanDialog.getSampleRates()
-        channels = scanDialog.channelsCombo.currentIndex()
-        res = ImportDialogScan(self, dirPath, scanMode, formats, sampleRates, channels).exec_()
+        dirPath = scanOptionsDialog.dirPathEdit.text()
+        scanMode = scanOptionsDialog.scanModeCombo.currentIndex()
+        formats = scanOptionsDialog.getFormats()
+        sampleRates = scanOptionsDialog.getSampleRates()
+        channels = scanOptionsDialog.channelsCombo.currentIndex()
+        scanLimits = scanOptionsDialog.getScanLimits()
+        res = ImportDialogScan(self, dirPath, scanMode, formats, sampleRates, channels, scanLimits).exec_()
         if not res:
             return
         for filePath, fileName, info, tags in res:
@@ -766,7 +767,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
 #                print e
                 continue
             dirItem = QtGui.QStandardItem(fileInfo.absolutePath())
-            lengthItem = QtGui.QStandardItem(timeStr(float(info.frames) / info.samplerate, trailingAlways=True))
+            lengthItem = QtGui.QStandardItem(timeStr(info.frames / info.samplerate, trailingAlways=True))
             formatItem = QtGui.QStandardItem(info.format)
             rateItem = QtGui.QStandardItem(str(info.samplerate))
             channelsItem = QtGui.QStandardItem(str(info.channels))

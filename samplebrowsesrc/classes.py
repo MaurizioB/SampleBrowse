@@ -300,7 +300,7 @@ class Crawler(QtCore.QObject):
     currentBrowseDir = QtCore.pyqtSignal(str)
     found = QtCore.pyqtSignal(object, object)
     done = QtCore.pyqtSignal()
-    def __init__(self, dirPath, scanMode, formats, sampleRates, channels):
+    def __init__(self, dirPath, scanMode, formats, sampleRates, channels, scanLimits):
         QtCore.QObject.__init__(self)
         self.stop = Event()
         self.dirPath = dirPath
@@ -314,6 +314,22 @@ class Crawler(QtCore.QObject):
             self.methodList.append(self.checkSampleRate)
         if channels:
             self.methodList.append(self.checkChannels)
+        self.bigger, self.smaller, self.longer, self.shorter = scanLimits
+
+        if self.bigger and self.smaller:
+            self.methodList.append(self.checkSize)
+        elif self.bigger:
+            self.methodList.append(self.checkSizeBigger)
+        elif self.smaller:
+            self.methodList.append(self.checkSizeSmaller)
+
+        if self.longer and self.shorter:
+            self.methodList.append(self.checkLength)
+        elif self.longer:
+            self.methodList.append(self.checkLengthLonger)
+        elif self.shorter:
+            self.methodList.append(self.checkLengthShorter)
+
 
         if scanMode:
             if not isinstance(formats, (list, tuple)):
@@ -326,26 +342,47 @@ class Crawler(QtCore.QObject):
             self.iterator = DirIterator(
                 dirPath, QtCore.QDir.Files, flags=QtCore.QDirIterator.Subdirectories|QtCore.QDirIterator.FollowSymlinks)
 
-    def checkFormat(self, info):
+    def checkFormat(self, fileInfo, info):
         return info.format in self.formats
 
-    def checkSampleRate(self, info):
+    def checkSampleRate(self, fileInfo, info):
         return info.samplerate in self.sampleRates
 
-    def checkChannels(self, info):
+    def checkChannels(self, fileInfo, info):
         return info.channels == self.channels
+
+    def checkSize(self, fileInfo, info):
+        return self.bigger <= fileInfo.size() <= self.smaller
+
+    def checkSizeBigger(self, fileInfo, info):
+        return self.bigger <= fileInfo.size()
+
+    def checkSizeSmaller(self, fileInfo, info):
+        return fileInfo.size() <= self.smaller
+
+    def checkLength(self, fileInfo, info):
+        return self.longer <= info.frames / info.samplerate <= self.shorter
+
+    def checkLengthLonger(self, fileInfo, info):
+        return self.longer <= info.frames / info.samplerate
+
+    def checkLengthShorter(self, fileInfo, info):
+        return info.frames / info.samplerate <= self.shorter
+
 
     def run(self):
         while self.iterator.hasNext() and not self.stop.is_set():
             filePath = self.iterator.next()
-            self.currentBrowseDir.emit(self.iterator.filePath())
+            fileInfo = self.iterator.fileInfo()
+#            use an internal function to update directory?
+#            self.currentBrowseDir.emit(self.iterator.filePath())
             try:
                 info = soundfile.info(filePath)
                 for method in self.methodList:
-                    if not method(info):
+                    if not method(fileInfo, info):
                         break
                 else:
-                    self.found.emit(self.iterator.fileInfo(), info)
+                    self.found.emit(fileInfo, info)
             except:
                 pass
         self.done.emit()

@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtWidgets
 from samplebrowsesrc.constants import *
-from samplebrowsesrc.dialogs import ImportDialogScanDnD, SampleScanDialog
+from samplebrowsesrc.dialogs import ImportDialogScanDnD, ScanOptionsDialog
 from samplebrowsesrc.widgets import *
 
 class DropTimer(QtCore.QTimer):
@@ -134,19 +134,21 @@ class DbTreeView(TreeViewWithLines):
                 else:
                     fileList.append(fileInfo.absoluteFilePath())
             if dirList:
-                scanDialog = SampleScanDialog(self)
-                if not scanDialog.exec_():
+                scanOptionsDialog = ScanOptionsDialog(self)
+                if not scanOptionsDialog.exec_():
                     return
-                scanMode = scanDialog.scanModeCombo.currentIndex()
-                formats = scanDialog.getFormats()
-                sampleRates = scanDialog.getSampleRates()
-                channels = scanDialog.channelsCombo.currentIndex()
+                scanMode = scanOptionsDialog.scanModeCombo.currentIndex()
+                formats = scanOptionsDialog.getFormats()
+                sampleRates = scanOptionsDialog.getSampleRates()
+                channels = scanOptionsDialog.channelsCombo.currentIndex()
+                scanLimits = scanOptionsDialog.getScanLimits()
             else:
                 scanMode = 0
                 formats = True
                 sampleRates = True
                 channels = 0
-            res = ImportDialogScanDnD(self.main, dirList, fileList, scanMode, formats, sampleRates, channels, tag).exec_()
+                scanLimits = None, None, None, None
+            res = ImportDialogScanDnD(self.main, dirList, fileList, scanMode, formats, sampleRates, channels, scanLimits, tag).exec_()
             if not res:
                 return
             self.samplesImported.emit([(filePath, fileName, info, tags) for (filePath, fileName, info, tags) in res], currentTagIndex)
