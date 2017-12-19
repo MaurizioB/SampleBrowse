@@ -122,57 +122,6 @@ class WaveScene(QtWidgets.QGraphicsScene):
         self.waveRect = QtCore.QRectF(0, -1, leftPath.boundingRect().width(), 4)
 
 
-class UpArrowIcon(QtGui.QIcon):
-    def __init__(self):
-        pm = QtGui.QPixmap(12, 12)
-        pm.fill(QtCore.Qt.transparent)
-        qp = QtGui.QPainter(pm)
-        qp.setRenderHints(QtGui.QPainter.Antialiasing)
-        path = QtGui.QPainterPath()
-        path.moveTo(2, 8)
-        path.lineTo(6, 2)
-        path.lineTo(10, 8)
-        qp.drawPath(path)
-        del qp
-        QtGui.QIcon.__init__(self, pm)
-
-
-class DownArrowIcon(QtGui.QIcon):
-    def __init__(self):
-        pm = QtGui.QPixmap(12, 12)
-        pm.fill(QtCore.Qt.transparent)
-        qp = QtGui.QPainter(pm)
-        qp.setRenderHints(QtGui.QPainter.Antialiasing)
-        path = QtGui.QPainterPath()
-        path.moveTo(2, 4)
-        path.lineTo(6, 10)
-        path.lineTo(10, 4)
-        qp.drawPath(path)
-        del qp
-        QtGui.QIcon.__init__(self, pm)
-
-
-class VerticalDownToggleBtn(QtWidgets.QToolButton):
-    def __init__(self, *args, **kwargs):
-        QtWidgets.QToolButton.__init__(self, *args, **kwargs)
-        self.upIcon = UpArrowIcon()
-        self.downIcon = DownArrowIcon()
-        self.setMaximumSize(16, 16)
-        self.setIcon(self.downIcon)
-
-    def toggle(self, value):
-        if value:
-            self.setDown()
-        else:
-            self.setUp()
-
-    def setDown(self):
-        self.setIcon(self.downIcon)
-
-    def setUp(self):
-        self.setIcon(self.upIcon)
-
-
 class Player(QtCore.QObject):
     stateChanged = QtCore.pyqtSignal(object)
     notify = QtCore.pyqtSignal()
@@ -358,6 +307,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
 #        self.fsView.setRootIndex(self.fsModel.index(QtCore.QDir.currentPath()))
         self.fsView.setCurrentIndex(self.fsProxyModel.mapFromSource(self.fsModel.index(QtCore.QDir.currentPath())))
         self.fsView.clicked.connect(self.dirChanged)
+        self.fsView.activated.connect(self.dirChanged)
         self.fsView.customContextMenuRequested.connect(self.fsViewContextMenu)
 
         self.favouritesModel = QtGui.QStandardItemModel()
@@ -672,34 +622,42 @@ class SampleBrowse(QtWidgets.QMainWindow):
             dirLabelItem = QtGui.QStandardItem(fav)
             dirPath = self.settings.value(fav)
             dirPathItem = QtGui.QStandardItem(QtCore.QDir.toNativeSeparators(dirPath))
+            if not QtCore.QDir().exists(dirPath):
+                utils.setItalic(dirPathItem, True)
             dirPathItem.setData(dirPath, FilePathRole)
             dirPathItem.setFlags(dirPathItem.flags() ^ QtCore.Qt.ItemIsEditable)
             self.favouritesModel.appendRow([dirLabelItem, dirPathItem])
         self.settings.endGroup()
 
-    def browseFromFavourites(self, index):
-        if not index.isValid():
-            return
-        dirPathIndex = index.sibling(index.row(), 1)
-        self.browse(dirPathIndex.data(FilePathRole))
-
     def favouritesTableMousePressEvent(self, event):
         index = self.favouritesTable.indexAt(event.pos())
-        if event.button() != QtCore.Qt.RightButton:
-            self.browseFromFavourites(index)
-            return QtWidgets.QTableView.mousePressEvent(self.favouritesTable, event)
         if not index.isValid():
+            QtWidgets.QTableView.mousePressEvent(self.favouritesTable, event)
             return
-        QtWidgets.QTableView.mousePressEvent(self.favouritesTable, event)
         dirPathIndex = index.sibling(index.row(), 1)
         dirPath = dirPathIndex.data(FilePathRole)
+        if event.button() != QtCore.Qt.RightButton:
+            if QtCore.QDir().exists(dirPath):
+                self.browse(dirPath)
+                utils.setItalic(self.favouritesModel.itemFromIndex(dirPathIndex), False)
+                QtWidgets.QTableView.mousePressEvent(self.favouritesTable, event)
+            else:
+                utils.setItalic(self.favouritesModel.itemFromIndex(dirPathIndex), True)
+            return
+#        QtWidgets.QTableView.mousePressEvent(self.favouritesTable, event)
         menu = QtWidgets.QMenu()
         scrollToAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('folder'), 'Show directory in tree', menu)
+        if QtCore.QDir().exists(dirPath):
+            utils.setItalic(self.favouritesModel.itemFromIndex(dirPathIndex), False)
+        else:
+            scrollToAction.setEnabled(False)
+            utils.setItalic(self.favouritesModel.itemFromIndex(dirPathIndex), True)
         removeAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('edit-delete'), 'Remove from favourites', menu)
         menu.addActions([scrollToAction, utils.menuSeparator(menu), removeAction])
         res = menu.exec_(self.favouritesTable.viewport().mapToGlobal(event.pos()))
         if res == scrollToAction:
             self.fsView.scrollToPath(dirPath)
+            QtWidgets.QTableView.mousePressEvent(self.favouritesTable, event)
         elif res == removeAction:
             self.settings.beginGroup('Favourites')
             for fav in self.settings.childKeys():
@@ -743,6 +701,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 path = QtCore.QDir('.')
         else:
             path = QtCore.QDir(path)
+        if self.currentBrowseDir and self.currentBrowseDir == path:
+            return
         self.currentBrowseDir = path
         self.browseModel.clear()
         self.browseModel.setHorizontalHeaderLabels(['Name', None, 'Length', 'Format', 'Rate', 'Ch.', 'Bits', None, None])

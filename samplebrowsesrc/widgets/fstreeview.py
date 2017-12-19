@@ -9,6 +9,12 @@ class FsTreeView(QtWidgets.QTreeView):
         self.currentTimer.setInterval(1000)
         self.currentTimer.timeout.connect(self.resetCurrent)
 
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key_Space and self.currentIndex().isValid():
+            self.activated.emit(self.currentIndex())
+        else:
+            QtWidgets.QTreeView.keyPressEvent(self, event)
+
     def setModel(self, model):
         QtWidgets.QTreeView.setModel(self, model)
         model.sourceModel().directoryLoaded.connect(self.scrollToCheck)
