@@ -396,7 +396,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
         self.dbDirView = TreeViewWithLines()
         self.dbDirView.setEditTriggers(self.dbDirView.NoEditTriggers)
-        self.dbDirView.doubleClicked.connect(self.dbDirViewSelect)
+        self.dbDirView.clicked.connect(self.dbDirViewSelect)
         self.dbSplitter.addWidget(self.dbDirView, label='Directories')
         self.dbDirModel = DbDirModel(self.sampleDb)
         self.dbDirView.setModel(self.dbDirModel)
@@ -443,7 +443,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.sampleView.setItemDelegateForColumn(0, self.sampleControlDelegate)
         self.sampleView.keyPressEvent = self.sampleViewKeyPressEvent
         self.sampleView.customContextMenuRequested.connect(self.sampleContextMenu)
-        self.sampleView.fileUnreadable.connect(self.setIndexReadable)
+        self.sampleView.fileReadable.connect(self.setIndexReadable)
 
         self.waveScene = WaveScene()
         self.waveView.setScene(self.waveScene)
@@ -468,9 +468,6 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.currentDbQuery = None
         self.sampleDbUpdated = False
 
-        startupView = self.settings.value('startupView', 0, type=int)
-        self.browseSelectGroup.button(startupView).setChecked(True)
-        self.toggleBrowser(startupView)
 #        self.browse()
 #        for column, visible in browseColumns.items():
 #            self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
@@ -563,9 +560,11 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
     def showEvent(self, event):
         if not self.shown:
+            startupView = self.settings.value('startupView', 0, type=int)
+            self.browseSelectGroup.button(startupView).setChecked(True)
             QtCore.QTimer.singleShot(
                 0, 
-                lambda: self.fsView.scrollToPath(QtCore.QDir.currentPath())
+                lambda: [self.fsView.scrollToPath(QtCore.QDir.currentPath()), self.toggleBrowser(startupView)]
                 )
             self.resize(640, 480)
             self.shown = True
@@ -1213,6 +1212,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
 
     def toggleBrowser(self, index):
+        if self.browserStackedLayout.currentIndex() == index:
+            return
         self.browserStackedLayout.setCurrentIndex(index)
         self.filterStackedLayout.minimumSize = self.filterStackedLayout.itemAt(index).widget().minimumSizeHint
         self.filterStackedLayout.setCurrentIndex(index)

@@ -1,10 +1,12 @@
 import soundfile
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+from samplebrowsesrc.utils import *
 from samplebrowsesrc.constants import *
 
 class SampleView(QtWidgets.QTableView):
-    fileUnreadable = QtCore.pyqtSignal(object, bool)
+    fileReadable = QtCore.pyqtSignal(object, bool)
+
     def viewportEvent(self, event):
         if event.type() == QtCore.QEvent.ToolTip:
             index = self.indexAt(event.pos())
@@ -17,16 +19,28 @@ class SampleView(QtWidgets.QTableView):
                 info = fileIndex.data(InfoRole)
                 tags = index.sibling(index.row(), tagsColumn).data(TagsRole)
                 if tags:
-                    tagsText = '<br/><h4>Tags:</h4><ul><li>{}</li></ul>'.format('</li><li>'.join(tags))
+                    tagsText = '''
+                        <h4 style="margin-bottom: 0px;">Tags</h4>
+                        <ul style="margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 0px; -qt-list-indent: 0;">
+                            <li style="margin-left:16px; -qt-block-indent:0; text-indent:0px;">
+                            {}
+                            </li>
+                        </ul>
+                        '''.format('</li><li style="margin-left:16px; -qt-block-indent:0; text-indent:0px;">'.join(tags))
                 else:
                     tagsText = ''
                 try:
                     if not info:
                         info = soundfile.info(filePath)
-                    self.fileUnreadable.emit(fileIndex, True)
+                    self.fileReadable.emit(fileIndex, True)
+                    size = QtCore.QFileInfo(filePath).size()
                     self.setToolTip('''
                         <h3>{fileName}</h3>
                         <table>
+                            <tr>
+                                <td>Size:</td>
+                                <td>{size}{sizeFull}</td>
+                            </tr>
                             <tr>
                                 <td>Path:</td>
                                 <td>{dir}</td>
@@ -51,6 +65,8 @@ class SampleView(QtWidgets.QTableView):
                         {tags}
                         '''.format(
                             fileName=fileName, 
+                            size=sizeStr(size), 
+                            sizeFull=' ({}B)'.format(size) if size > 1024 else '', 
                             dir=dir, 
                             length=float(info.frames) / info.samplerate, 
                             format=info.format, 
@@ -62,7 +78,7 @@ class SampleView(QtWidgets.QTableView):
                         )
                 except:
                     self.setToolTip('<h3>{}</h3>(file not available or unreadable)'.format(fileName))
-                    self.fileUnreadable.emit(fileIndex, False)
+                    self.fileReadable.emit(fileIndex, False)
             else:
                 self.setToolTip('')
                 QtWidgets.QToolTip.showText(event.pos(), '')

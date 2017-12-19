@@ -213,7 +213,6 @@
         </spacer>
        </item>
       </layout>
-      <zorder>label_5</zorder>
       <zorder>groupBox</zorder>
       <zorder>verticalSpacer</zorder>
      </widget>
