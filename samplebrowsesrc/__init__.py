@@ -473,6 +473,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
     def quit(self):
         self.settings.setValue('previousVolume', self.volumeSlider.value())
+        self.settings.setValue('previousView', self.browseSelectGroup.checkedId())
         self.settings.sync()
         self.dbConn.commit()
         self.dbConn.close()
@@ -511,6 +512,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
     def showEvent(self, event):
         if not self.shown:
             startupView = self.settings.value('startupView', 0, type=int)
+            if startupView == 2:
+                startupView = self.settings.value('previousView', 0, type=int)
             self.browseSelectGroup.button(startupView).setChecked(True)
             QtCore.QTimer.singleShot(
                 0, 
@@ -529,16 +532,39 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 if self.sampleView.model().rowCount() <= 1:
                     self.player.stop()
                 else:
+                    #this is a "fake" next, but we need it for the while cycle
+                    next = self.currentSampleIndex
+                    passes = 0
                     if event.modifiers() == QtCore.Qt.ShiftModifier:
-                        if self.currentSampleIndex.row() == 0:
-                            next = self.currentSampleIndex.sibling(self.sampleView.model().rowCount() -1, 0)
-                        else:
-                            next = self.currentSampleIndex.sibling(self.currentSampleIndex.row() - 1, 0)
+                        while True:
+                            if next.row() == 0:
+                                next = next.sibling(self.sampleView.model().rowCount() -1, 0)
+                                passes += 1
+                                if passes > 1:
+                                    self.player.stop()
+                                    return
+                            else:
+                                next = next.sibling(next.row() - 1, 0)
+                            try:
+                                soundfile.info(next.data(FilePathRole))
+                                break
+                            except:
+                                pass
                     else:
-                        if self.currentSampleIndex.row() == self.sampleView.model().rowCount() - 1:
-                            next = self.currentSampleIndex.sibling(0, 0)
-                        else:
-                            next = self.currentSampleIndex.sibling(self.currentSampleIndex.row() + 1, 0)
+                        while True:
+                            if next.row() == self.sampleView.model().rowCount() - 1:
+                                next = next.sibling(0, 0)
+                                passes += 1
+                                if passes > 1:
+                                    self.player.stop()
+                                    return
+                            else:
+                                next = next.sibling(next.row() + 1, 0)
+                            try:
+                                soundfile.info(next.data(FilePathRole))
+                                break
+                            except:
+                                pass
                     self.sampleView.setCurrentIndex(next)
                     self.play(next)
         elif event.key() in (QtCore.Qt.Key_Period, QtCore.Qt.Key_Escape):
@@ -595,11 +621,18 @@ class SampleBrowse(QtWidgets.QMainWindow):
         res = ImportDialogScan(self, dirPath, scanMode, formats, sampleRates, channels, scanLimits).exec_()
         if not res:
             return
+        fileNameList = []
         for filePath, fileName, info, tags in res:
+            fileNameList.append(fileName)
             self._addSampleToDb(filePath, fileName, info, ','.join(tags))
         self.dbConn.commit()
         self.reloadTags()
         self.dbDirModel.updateTree()
+        if self.sampleView.model() == self.browseModel and self.currentBrowseDir and dirPath in self.currentBrowseDir.absolutePath():
+            for fileName in fileNameList:
+                match = self.browseModel.match(self.browseModel.index(0, 0), QtCore.Qt.DisplayRole, fileName, flags=QtCore.Qt.MatchExactly)
+                if match:
+                    utils.setBold(match[0])
         #TODO: reload database table?
 
     def favouritesDataChanged(self, index, _):
@@ -639,19 +672,19 @@ class SampleBrowse(QtWidgets.QMainWindow):
         if event.button() != QtCore.Qt.RightButton:
             if QtCore.QDir().exists(dirPath):
                 self.browse(dirPath)
-                utils.setItalic(self.favouritesModel.itemFromIndex(dirPathIndex), False)
+                utils.setItalic(dirPathIndex, False)
                 QtWidgets.QTableView.mousePressEvent(self.favouritesTable, event)
             else:
-                utils.setItalic(self.favouritesModel.itemFromIndex(dirPathIndex), True)
+                utils.setItalic(dirPathIndex, True)
             return
 #        QtWidgets.QTableView.mousePressEvent(self.favouritesTable, event)
         menu = QtWidgets.QMenu()
         scrollToAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('folder'), 'Show directory in tree', menu)
         if QtCore.QDir().exists(dirPath):
-            utils.setItalic(self.favouritesModel.itemFromIndex(dirPathIndex), False)
+            utils.setItalic(dirPathIndex, False)
         else:
             scrollToAction.setEnabled(False)
-            utils.setItalic(self.favouritesModel.itemFromIndex(dirPathIndex), True)
+            utils.setItalic(dirPathIndex, True)
         removeAction = QtWidgets.QAction(QtGui.QIcon.fromTheme('edit-delete'), 'Remove from favourites', menu)
         menu.addActions([scrollToAction, utils.menuSeparator(menu), removeAction])
         res = menu.exec_(self.favouritesTable.viewport().mapToGlobal(event.pos()))
@@ -708,26 +741,40 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.browseModel.setHorizontalHeaderLabels(['Name', None, 'Length', 'Format', 'Rate', 'Ch.', 'Bits', None, None])
         for column, visible in browseColumns.items():
             self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
-        for fileInfo in path.entryInfoList(availableExtensions, QtCore.QDir.Files):
+        if self.settings.value('scanAll', False, type=bool):
+            fileList = path.entryInfoList(QtCore.QDir.Files)
+        else:
+            fileList = path.entryInfoList(availableExtensionsWildcard, QtCore.QDir.Files)
+        showAll = self.settings.value('showAll', False, type=bool)
+        for fileInfo in fileList:
             filePath = fileInfo.absoluteFilePath()
             fileName = fileInfo.fileName()
-#            if fileName.lower().endswith(availableFormats):
             fileItem = QtGui.QStandardItem(fileName)
+            self.sampleDb.execute('SELECT * FROM samples WHERE filePath=?', (filePath, ))
+            if self.sampleDb.fetchall():
+                utils.setBold(fileItem)
             fileItem.setData(filePath, FilePathRole)
-            fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-start'))
             try:
                 info = soundfile.info(filePath)
                 fileItem.setData(info, InfoRole)
+                fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-start'))
+                dirItem = QtGui.QStandardItem(fileInfo.absolutePath())
+                lengthItem = QtGui.QStandardItem(timeStr(info.frames / info.samplerate, trailingAlways=True))
+                formatItem = QtGui.QStandardItem(info.format)
+                rateItem = QtGui.QStandardItem(str(info.samplerate))
+                channelsItem = QtGui.QStandardItem(str(info.channels))
+                subtypeItem = QtGui.QStandardItem(info.subtype)
+                self.browseModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem])
             except Exception as e:
-#                print e
-                continue
-            dirItem = QtGui.QStandardItem(fileInfo.absolutePath())
-            lengthItem = QtGui.QStandardItem(timeStr(info.frames / info.samplerate, trailingAlways=True))
-            formatItem = QtGui.QStandardItem(info.format)
-            rateItem = QtGui.QStandardItem(str(info.samplerate))
-            channelsItem = QtGui.QStandardItem(str(info.channels))
-            subtypeItem = QtGui.QStandardItem(info.subtype)
-            self.browseModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem])
+                print(e)
+                if not showAll:
+                    continue
+                fileItem.setIcon(QtGui.QIcon.fromTheme('document-new'))
+                fileItem.setFlags(fileItem.flags() ^ QtCore.Qt.ItemIsEnabled)
+                utils.setItalic(fileItem)
+                emptyItem = QtGui.QStandardItem()
+                emptyItem.setFlags(emptyItem.flags() ^ QtCore.Qt.ItemIsEnabled)
+                self.browseModel.appendRow([fileItem] + [emptyItem.clone() for c in range(self.browseModel.columnCount() - 1)])
         self.sampleView.resizeColumnsToContents()
         self.sampleView.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         for c in range(1, subtypeColumn + 1):
@@ -768,6 +815,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         if res == addToDatabaseAction:
             info = fileIndex.data(InfoRole)
             self.addSampleToDb(filePath, fileName, info, '', None)
+            utils.setBold(fileIndex, True)
         elif res == delFromDatabaseAction:
             filePath = fileIndex.data(FilePathRole)
             self.sampleDb.execute(
@@ -779,6 +827,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             if self.sampleView.model() == self.dbProxyModel:
                 self.dbModel.takeRow(fileIndex.row())
             else:
+                utils.setBold(fileIndex, False)
                 self.sampleDbUpdated = True
             self.dbDirModel.updateTree()
         elif res == editTagsAction:
@@ -816,11 +865,13 @@ class SampleBrowse(QtWidgets.QMainWindow):
         if res == addAllAction:
             self.addSampleGroupToDb(new)
             self.dbDirModel.updateTree()
+            [utils.setBold(fileIndex, True) for fileIndex in new]
         elif res == addAllWithTagsAction:
             tags = AddSamplesWithTagDialog(self, new).exec_()
             if isinstance(tags, str):
                 self.addSampleGroupToDb(new, tags)
-            self.dbDirModel.updateTree()
+                self.dbDirModel.updateTree()
+                [utils.setBold(fileIndex, True) for fileIndex in new]
         elif res == editTagsAction:
             indexes = []
             fileList = []
@@ -869,6 +920,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                     for index in sorted(exist, key=lambda index: index.row(), reverse=True):
                         self.dbModel.takeRow(index.row())
                 else:
+                    [utils.setBold(fileIndex, False) for fileIndex in exist]
                     self.sampleDbUpdated = True
                 self.reloadTags()
                 self.dbDirModel.updateTree()

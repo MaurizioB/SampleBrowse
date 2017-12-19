@@ -20,6 +20,7 @@ class SettingsDialog(QtWidgets.QDialog):
 
         self.startupViewGroup.setId(self.startupFsRadio, 0)
         self.startupViewGroup.setId(self.startupDbRadio, 1)
+        self.startupViewGroup.setId(self.startupLastRadio, 2)
 
         self.defaultVolumeGroup.setId(self.defaultVolume100Radio, 0)
         self.defaultVolumeGroup.setId(self.defaultVolumePreviousRadio, 1)
@@ -37,6 +38,8 @@ class SettingsDialog(QtWidgets.QDialog):
     def exec_(self):
         startupView = self.settings.value('startupView', 0, type=int)
         self.startupViewGroup.button(startupView).setChecked(True)
+        self.scanAllChk.setChecked(self.settings.value('scanAll', False, type=bool))
+        self.showAllChk.setChecked(self.settings.value('showAll', False, type=bool))
 
         dataDir = QtCore.QDir(QtCore.QStandardPaths.standardLocations(QtCore.QStandardPaths.AppDataLocation)[0])
         dbFile = QtCore.QFile(dataDir.filePath('sample.sqlite'))
@@ -53,6 +56,14 @@ class SettingsDialog(QtWidgets.QDialog):
         self.settings.setValue('startupView', self.startupViewGroup.checkedId())
         self.settings.setValue('defaultVolumeMode', self.defaultVolumeGroup.checkedId())
         self.settings.setValue('customVolume', self.defaultVolumeCustomSpin.value())
+        if self.scanAllChk.isChecked():
+            self.settings.setValue('scanAll', True)
+        else:
+            self.settings.remove('scanAll')
+        if self.showAllChk.isChecked():
+            self.settings.setValue('showAll', True)
+        else:
+            self.settings.remove('showAll')
         self.settings.sync()
 
 

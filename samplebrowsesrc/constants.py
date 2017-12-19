@@ -2,7 +2,13 @@ from PyQt5 import QtCore
 import soundfile
 
 availableFormats = tuple(f.lower() for f in soundfile.available_formats().keys())
-availableExtensions = tuple('*.' + f for f in availableFormats)
+availableExtensionsDot = []
+availableExtensionsWildcard = []
+for f in availableFormats:
+    availableExtensionsDot.append('.' + f)
+    availableExtensionsWildcard.append('*.' + f)
+availableExtensionsWildcard = tuple('*.' + f for f in availableFormats)
+availableExtensionsDot = tuple('*.' + f for f in availableFormats)
 
 sampleRatesList = (192000, 176400, 96000, 88200, 48000, 44100, 32000, 22050, 16000, 8000)
 

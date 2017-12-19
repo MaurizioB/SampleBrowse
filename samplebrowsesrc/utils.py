@@ -1,4 +1,4 @@
-from PyQt5 import QtWidgets
+from PyQt5 import QtCore, QtWidgets
 
 def sizeStr(size):
     if size < 1024:
@@ -25,14 +25,38 @@ def timeStr(seconds, leading=0, trailing=3, trailingAlways=False, multiple=True,
     return text if leadingMultiple or full else text.lstrip('0').lstrip('.:')
 
 def setBold(item, bold=True):
-    font = item.font()
-    font.setBold(bold)
-    item.setFont(font)
+    try:
+        font = item.font()
+        font.setBold(bold)
+        item.setFont(font)
+    except:
+        try:
+            font = item.data(QtCore.Qt.FontRole)
+            font.setBold(bold)
+            item.model().setData(item, font, QtCore.Qt.FontRole)
+        except:
+            try:
+                model = item.model()
+                setBold(model.itemFromIndex(item), bold)
+            except:
+                setBold(model.sourceModel().itemFromIndex(model.mapToSource(item)), bold)
 
 def setItalic(item, italic=True):
-    font = item.font()
-    font.setItalic(italic)
-    item.setFont(font)
+    try:
+        font = item.font()
+        font.setItalic(italic)
+        item.setFont(font)
+    except:
+        try:
+            font = item.data(QtCore.Qt.FontRole)
+            font.setItalic(italic)
+            item.model().setData(item, font, QtCore.Qt.FontRole)
+        except:
+            try:
+                model = item.model()
+                setItalic(model.itemFromIndex(item), italic)
+            except:
+                setItalic(model.sourceModel().itemFromIndex(model.mapToSource(item)), italic)
 
 def menuSeparator(parent):
     sep = QtWidgets.QAction(parent)
