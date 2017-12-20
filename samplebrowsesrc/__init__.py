@@ -177,7 +177,7 @@ class Player(QtCore.QObject):
         self.sampleSize = format.sampleSize()
         self.sampleRate = format.sampleRate()
         self.output = QtMultimedia.QAudioOutput(self.audioDevice, format)
-        self.output.setNotifyInterval(50)
+        self.output.setNotifyInterval(25)
         self.output.stateChanged.connect(self.stateChanged)
         self.output.notify.connect(self.notify)
 
@@ -474,6 +474,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
     def quit(self):
         self.settings.setValue('previousVolume', self.volumeSlider.value())
         self.settings.setValue('previousView', self.browseSelectGroup.checkedId())
+        self.settings.setValue('lastGeometry', self.geometry())
         self.settings.sync()
         self.dbConn.commit()
         self.dbConn.close()
@@ -519,7 +520,29 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 0, 
                 lambda: [self.fsView.scrollToPath(QtCore.QDir.currentPath()), self.toggleBrowser(startupView)]
                 )
-            self.resize(640, 480)
+            try:
+                lastGeometry = self.settings.value('lastGeometry', None, type=QtCore.QRect)
+                desktop = QtWidgets.QDesktopWidget()
+                rect = QtCore.QRect(0, 0, 0, 0)
+                for screen in range(desktop.screenCount()):
+                    rect |= desktop.screenGeometry(screen)
+                if not lastGeometry in rect:
+                    if lastGeometry.width() > rect.width():
+                        lastGeometry.setRight(rect.width())
+                    if lastGeometry.height() > rect.height():
+                        lastGeometry.setBottom(rect.height())
+                    if lastGeometry.x() < 0:
+                        lastGeometry.moveLeft(0)
+                    if lastGeometry.y() < 0:
+                        lastGeometry.moveTop(0)
+                    if lastGeometry.right() > rect.width():
+                        lastGeometry.moveRight(rect.width())
+                    if lastGeometry.bottom() > rect.height():
+                        lastGeometry.moveBottom(rect.height())
+                self.setGeometry(lastGeometry)
+            except Exception as e:
+                print(e)
+                self.resize(640, 480)
             self.shown = True
 
     def sampleViewKeyPressEvent(self, event):
@@ -766,7 +789,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 subtypeItem = QtGui.QStandardItem(info.subtype)
                 self.browseModel.appendRow([fileItem, dirItem, lengthItem, formatItem, rateItem, channelsItem, subtypeItem])
             except Exception as e:
-                print(e)
+#                print(e)
                 if not showAll:
                     continue
                 fileItem.setIcon(QtGui.QIcon.fromTheme('document-new'))
@@ -1004,6 +1027,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
     def editTags(self, index):
         if self.sampleView.model() != self.dbProxyModel or index.column() != tagsColumn:
+            self.play(index)
             return
         fileIndex = index.sibling(index.row(), 0)
         filePath = fileIndex.data(FilePathRole)
@@ -1321,8 +1345,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
         if self.currentShownSampleIndex and self.currentShownSampleIndex == index:
             return True
         fileIndex = index.sibling(index.row(), 0)
-        if self.player.isPlaying():
-            self.play(fileIndex)
+#        if self.player.isPlaying():
+#            self.play(fileIndex)
         info = fileIndex.data(InfoRole)
         if not info:
             fileItem = self.sampleView.model().itemFromIndex(fileIndex)
