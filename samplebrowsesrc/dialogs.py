@@ -1,3 +1,4 @@
+import sys
 import os
 import soundfile
 from collections import namedtuple
@@ -143,7 +144,7 @@ class AboutDialog(QtWidgets.QDialog):
         self.aboutQtBtn.setIcon(QtGui.QIcon(':/qt-project.org/qmessagebox/images/qtlogo-64.png'))
         self.aboutQtBtn.clicked.connect(lambda: QtWidgets.QMessageBox.aboutQt(self))
 
-        self.aknTextEdit.setHtml('''
+        baseHtml = '''
             SampleBrowse wouldn't have been possible without the following libraries and people...
             <h3>libsndfile</h3>
             Written by Erik de Castro Lopo: <a href="http://www.mega-nerd.com/libsndfile/">mega-nerd.com</a><br/>
@@ -155,10 +156,17 @@ class AboutDialog(QtWidgets.QDialog):
             Python module written by <a href="https://github.com/tuxu">Tino Wagner</a>: 
                 <a href="https://pypi.python.org/pypi/samplerate">samplerate</a>
             
+            {tango}
+            
             <h3>Thanks to:</h3>
             Faber aka Fabio Vescarelli (<a href="http://www.faberbox.com/">faberbox.com</a>) for his great help in helping me
             to understand the secrets of Python... and his patience ;-)
-            ''')
+            '''
+        tangoHtml = '''
+            <h3>Tango Icon Library</h3>
+            This version of SampleBrowse uses icons from the <a href="http://tango.freedesktop.org/">Tango Desktop Project</a>
+            '''
+        self.aknTextBrowser.setHtml(baseHtml.format(tango=tangoHtml if 'linux' not in sys.platform else ''))
         self.shown = False
 
     #since there are some issues with QLabels in layouts, we set the minimum width
