@@ -536,11 +536,12 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.browseModel.setHorizontalHeaderLabels(['Name', None, 'Length', 'Format', 'Rate', 'Ch.', 'Bits', None, None])
         for column, visible in browseColumns.items():
             self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
-        if self.settings.value('scanAll', False, type=bool):
+        showAll = self.settings.value('showAll', False, type=bool)
+        scanAll = self.settings.value('scanAll', False, type=bool)
+        if scanAll or showAll:
             fileList = path.entryInfoList(QtCore.QDir.Files)
         else:
             fileList = path.entryInfoList(availableExtensionsWildcard, QtCore.QDir.Files)
-        showAll = self.settings.value('showAll', False, type=bool)
         for fileInfo in fileList:
             filePath = fileInfo.absoluteFilePath()
             fileName = fileInfo.fileName()
@@ -550,6 +551,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 utils.setBold(fileItem)
             fileItem.setData(filePath, FilePathRole)
             try:
+                if not scanAll:
+                    assert fileInfo.completeSuffix() in availableFormats
                 info = soundfile.info(filePath)
                 fileItem.setData(info, InfoRole)
                 fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-start'))
