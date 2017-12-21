@@ -50,6 +50,7 @@ class WaveScene(QtWidgets.QGraphicsScene):
         self.deltaPos = 0
         self.clear()
         self.playhead = self.addLine(0, -100, 0, 100, self.playheadPen)
+        self.playhead.setZValue(100)
 
         samples, channels = waveData.shape
         #resolution is 5 samples per scene pixel
@@ -173,6 +174,7 @@ class WaveView(QtWidgets.QGraphicsView):
         self.waveScene.drawWave(waveData, self.viewport().rect().width())
         self.fitInView(self.waveScene.waveRect)
         self.playerFrame.show()
+        self.playerFrame.move(self.width() - self.playerFrame.width(), self.height() - self.playerFrame.height())
 
     def resetPlayhead(self, sampleRate):
         self.waveScene.resetPlayhead(sampleRate)
@@ -190,9 +192,6 @@ class WaveView(QtWidgets.QGraphicsView):
 
     def wheelEvent(self, event):
         pass
-
-    def showEvent(self, event):
-        self.playerFrame.move(self.width() - self.playerFrame.width(), self.height() - self.playerFrame.height())
 
     def resizeEvent(self, event):
         self.playerFrame.move(self.width() - self.playerFrame.width(), self.height() - self.playerFrame.height())
