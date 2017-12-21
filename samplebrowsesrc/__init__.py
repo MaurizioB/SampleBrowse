@@ -7,253 +7,14 @@ import sqlite3
 #from math import log
 from PyQt5 import QtCore, QtGui, QtMultimedia, QtWidgets, uic
 import soundfile
-import samplerate
-import numpy as np
 
 import samplebrowsesrc.icons
+from samplebrowsesrc.player import *
 from samplebrowsesrc.widgets import *
 from samplebrowsesrc.constants import *
 from samplebrowsesrc.dialogs import *
 from samplebrowsesrc.classes import *
 from samplebrowsesrc.utils import *
-
-class WaveScene(QtWidgets.QGraphicsScene):
-    _orange = QtGui.QColor()
-    _orange.setNamedColor('orangered')
-    waveGrad = QtGui.QLinearGradient(0, -1, 0, 1)
-    waveGrad.setSpread(waveGrad.RepeatSpread)
-#    waveGrad.setCoordinateMode(waveGrad.ObjectBoundingMode)
-    waveGrad.setColorAt(0.0, QtCore.Qt.red)
-    waveGrad.setColorAt(.15, _orange)
-    waveGrad.setColorAt(.5, QtCore.Qt.darkGreen)
-    waveGrad.setColorAt(.85, _orange)
-    waveGrad.setColorAt(1, QtCore.Qt.red)
-    waveBrush = QtGui.QBrush(waveGrad)
-    wavePen = QtGui.QPen(QtCore.Qt.NoPen)
-    zeroPen = QtGui.QPen(QtCore.Qt.darkGray, .5)
-    zeroPen.setCosmetic(True)
-    playheadPen = QtGui.QPen(QtCore.Qt.black, .5)
-    playheadPen.setCosmetic(True)
-
-    def __init__(self, *args, **kwargs):
-        QtWidgets.QGraphicsScene.__init__(self, *args, **kwargs)
-        self.waveRect = QtCore.QRectF()
-        self.realStep = 0
-        self.sampleRate = 0
-
-    def showPlayhead(self):
-        self.playhead.show()
-
-    def hidePlayhead(self):
-        self.playhead.hide()
-
-    def resetPlayhead(self, sampleRate):
-        self.playhead.setX(0)
-        self.sampleRate = sampleRate
-#        self.playhead.setX(.05 * sampleRate / self.realStep)
-#        print(sampleRate * .05 / self.realStep)
-
-    def movePlayhead(self, secs):
-        self.playhead.setX((secs) * self.sampleRate / self.realStep)
-#        self.playhead.setX(self.playhead.x() + sampleRate * .05 / self.realStep)
-
-    def drawWave(self, waveData, width):
-        self.clear()
-        self.playhead = self.addLine(0, -100, 0, 100, self.playheadPen)
-#        self.playhead.setFlags(self.playhead.flags() ^ self.playhead.ItemIgnoresTransformations)
-
-        samples, channels = waveData.shape
-        #resolution is 5 samples per scene pixel
-        step = samples//(width*5)
-#        self.realStep = samples/(width*5)
-        print(step, samples/(width*5))
-        self.realStep = step
-
-        path = QtGui.QPainterPath()
-        path.moveTo(0, 0)
-        pos = 0
-        leftData = waveData[:, 0]
-        leftMin = np.amin(np.pad(leftData, (0, step - leftData.size % step), mode='constant', constant_values=0).reshape(-1, step), axis=1)
-        leftMax = np.amax(np.pad(leftData, (0, step - leftData.size % step), mode='constant', constant_values=0).reshape(-1, step), axis=1)
-        for value in leftMax:
-            path.lineTo(pos, value)
-            pos += 1
-        path.lineTo(pos, 0)
-        path.moveTo(0, 0)
-        pos = 0
-        for value in leftMin:
-            path.lineTo(pos, value)
-            pos += 1
-        path.lineTo(pos, 0)
-        path.closeSubpath()
-        leftPath = self.addPath(path, self.wavePen, self.waveBrush)
-        self.addLine(0, 0, leftPath.boundingRect().width(), 0, self.zeroPen)
-        if channels == 1:
-            self.waveRect = QtCore.QRectF(0, -1, leftPath.boundingRect().width(), 2)
-            return
-
-        path = QtGui.QPainterPath()
-        path.moveTo(0, 0)
-        pos = 0
-        rightData = waveData[:, 1]
-        rightMin = np.amin(np.pad(rightData, (0, step - rightData.size % step), mode='constant', constant_values=0).reshape(-1, step), axis=1)
-        rightMax = np.amax(np.pad(rightData, (0, step - rightData.size % step), mode='constant', constant_values=0).reshape(-1, step), axis=1)
-        for value in rightMax:
-            path.lineTo(pos, value)
-            pos += 1
-        path.lineTo(pos, 0)
-        path.moveTo(0, 0)
-        pos = 0
-        for value in rightMin:
-            path.lineTo(pos, value)
-            pos += 1
-        path.lineTo(pos, 0)
-        path.closeSubpath()
-        path.translate(0, 2)
-        rightPath = self.addPath(path, self.wavePen, self.waveBrush)
-        self.addLine(0, 2, rightPath.boundingRect().width(), 2, self.zeroPen)
-
-        leftText = self.addText('L')
-        leftText.setY(-1)
-        leftText.setFlag(leftText.ItemIgnoresTransformations, True)
-        rightText = self.addText('R')
-        rightText.setY(1)
-        rightText.setFlag(leftText.ItemIgnoresTransformations, True)
-        self.waveRect = QtCore.QRectF(0, -1, leftPath.boundingRect().width(), 4)
-
-
-class Player(QtCore.QObject):
-    stateChanged = QtCore.pyqtSignal(object)
-    notify = QtCore.pyqtSignal()
-    started = QtCore.pyqtSignal()
-    stopped = QtCore.pyqtSignal()
-    paused = QtCore.pyqtSignal()
-
-    def __init__(self, main, audioDeviceName=None, sampleRateConversion='sinc_fastest'):
-        QtCore.QObject.__init__(self)
-        self.main = main
-        self.audioBufferArray = QtCore.QBuffer(self)
-        self.output = None
-        self.audioDevice = None
-        self.setAudioDeviceByName(audioDeviceName)
-        self.setAudioDevice()
-        self.sampleRateConversion = sampleRateConversion
-
-    def setSampleRateConversion(self, sampleRateConversion='sinc_fastest'):
-        self.sampleRateConversion = sampleRateConversion
-
-    def setAudioDeviceByName(self, audioDeviceName):
-        defaultDevice = QtMultimedia.QAudioDeviceInfo.defaultOutputDevice()
-        if not audioDeviceName:
-            self.audioDevice = defaultDevice
-        elif audioDeviceName == defaultDevice:
-            self.audioDevice = defaultDevice
-        else:
-            for sysDevice in QtMultimedia.QAudioDeviceInfo.availableDevices(QtMultimedia.QAudio.AudioOutput):
-                if sysDevice.deviceName() == audioDeviceName:
-                    break
-            else:
-                sysDevice = defaultDevice
-            self.audioDevice = sysDevice
-#        self.audioDeviceName = audioDeviceName if audioDeviceName else QtMultimedia.QaudioDeviceInfo.defaultOutputDevice()
-
-    def setAudioDevice(self, audioDevice=None):
-        if audioDevice:
-            self.audioDevice = audioDevice
-        sampleSize = 32 if 32 in self.audioDevice.supportedSampleSizes() else 16
-        sampleRate = 48000 if 48000 in self.audioDevice.supportedSampleRates() else 44100
-
-        format = QtMultimedia.QAudioFormat()
-        format.setSampleRate(sampleRate)
-        format.setChannelCount(2)
-        format.setSampleSize(sampleSize)
-        format.setCodec('audio/pcm')
-        format.setByteOrder(QtMultimedia.QAudioFormat.LittleEndian)
-        format.setSampleType(QtMultimedia.QAudioFormat.Float if sampleSize >= 32 else QtMultimedia.QAudioFormat.SignedInt)
-
-        if not self.audioDevice.isFormatSupported(format):
-            format = self.audioDevice.nearestFormat(format)
-            #do something else with self.audioDevice.nearestFormat(format)?
-        self.sampleSize = format.sampleSize()
-        self.sampleRate = format.sampleRate()
-        self.output = QtMultimedia.QAudioOutput(self.audioDevice, format)
-        self.output.setNotifyInterval(25)
-        self.output.stateChanged.connect(self.stateChanged)
-        self.output.notify.connect(self.notify)
-
-    def isPlaying(self):
-        return True if self.output.state() == QtMultimedia.QAudio.ActiveState else False
-
-    def stateChanged(self, state):
-        if state in (QtMultimedia.QAudio.StoppedState, QtMultimedia.QAudio.IdleState):
-            self.stopped.emit()
-        elif state == QtMultimedia.QAudio.ActiveState:
-            self.started.emit()
-        else:
-            self.paused.emit()
-
-#    def run(self):
-#        while True:
-#            res = self.audioQueue.get()
-#            if res == -1:
-#                break
-#            self.output.stop()
-#            self.audioBufferArray.close()
-#            self.audioBufferArray.setData(res)
-#            self.audioBufferArray.open(QtCore.QIODevice.ReadOnly)
-#            self.audioBufferArray.seek(0)
-#            self.output.start(self.audioBufferArray)
-#        self.output.stop()
-
-    def stop(self):
-        self.output.stop()
-
-    def play(self, waveData, info):
-        if info.samplerate != self.sampleRate:
-            #ratio is output/input
-            waveData = samplerate.resample(waveData, self.sampleRate / info.samplerate, self.sampleRateConversion)
-            
-        if info.channels == 1:
-            waveData = waveData.repeat(2, axis=1)/2
-        elif info.channels == 2:
-            pass
-        elif info.channels == 3:
-            front = waveData[:, [0, 1]]/1.5
-            center = waveData[:, [2]].repeat(2, axis=1)/2
-            waveData = front + center
-        elif info.channels == 4:
-            front = waveData[:, [0, 1]]/2
-            rear = waveData[:, [2, 3]]/2
-            waveData = front + rear
-        elif info.channels == 5:
-            front = waveData[:, [0, 1]]/2.5
-            rear = waveData[:, [2, 3]]/2.5
-            center = waveData[:, [4]].repeat(2, axis=1)/2
-            waveData = front + rear + center
-        elif info.channels == 6:
-            front = waveData[:, [0, 1]]/3
-            rear = waveData[:, [2, 3]]/3
-            center = waveData[:, [4]].repeat(2, axis=1)/2
-            sub = waveData[:, [5]].repeate(2, axis=1)/2
-            waveData = front + rear + center + sub
-        if self.sampleSize == 16:
-            waveData = (waveData * 32767).astype('int16')
-        self.audioBufferArray.close()
-        self.audioBufferArray.setData(waveData.tostring())
-        self.audioBufferArray.open(QtCore.QIODevice.ReadOnly)
-        self.audioBufferArray.seek(0)
-        self.output.start(self.audioBufferArray)
-
-    def setVolume(self, volume):
-#        try:
-#            volume = QtMultimedia.QAudio.convertVolume(volume / 100, QtMultimedia.QAudio.LogarithmicVolumeScale, QtMultimedia.QAudio.LinearVolumeScale)
-#        except:
-#            if volume >= 100:
-#                volume = 1
-#            else:
-#                volume = -log(1 - volume/100) / 4.60517018599
-        self.output.setVolume(volume/100)
-
 
 class SampleBrowse(QtWidgets.QMainWindow):
     def __init__(self):
@@ -390,15 +151,19 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.sampleControlDelegate.doubleClicked.connect(self.play)
         self.sampleView.clicked.connect(self.setCurrentWave)
         self.sampleView.doubleClicked.connect(self.editTags)
+        self.sampleView.doubleClicked.connect(self.sampleViewDoubleClicked)
         self.sampleView.setItemDelegateForColumn(0, self.sampleControlDelegate)
         self.sampleView.keyPressEvent = self.sampleViewKeyPressEvent
         self.sampleView.customContextMenuRequested.connect(self.sampleContextMenu)
         self.sampleView.fileReadable.connect(self.setIndexReadable)
 
-        self.waveScene = WaveScene()
-        self.waveView.setScene(self.waveScene)
-        self.player.stopped.connect(self.waveScene.hidePlayhead)
-        self.player.started.connect(self.waveScene.showPlayhead)
+        self.waveScene = self.waveView.scene()
+        self.waveView.mousePressEvent = self.waveViewMousePressEvent
+        self.waveView.stop.connect(self.player.stop)
+        self.waveView.toggle.connect(self.waveViewToggle)
+        self.player.stopped.connect(self.waveView.stopped)
+        self.player.started.connect(self.waveView.started)
+        self.player.paused.connect(self.waveView.paused)
 
         self.filterStackedLayout = QtWidgets.QStackedLayout()
         self.filterStackedLayout.sizeHint = lambda: QtCore.QSize(10, 10)
@@ -437,6 +202,13 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.dbTreeView.expandToDepth(0)
 
         self.doMenu()
+
+    def waveViewMousePressEvent(self, event):
+        if self.player.isPlaying():
+            pos = self.waveView.mapToScene(event.pos()).x()
+            self.player.seekPos(pos / self.waveScene.sceneRect().width())
+            self.waveScene.setPlayheadDeltaPos(pos)
+        QtWidgets.QGraphicsView.mousePressEvent(self.waveView, event)
 
     def doMenu(self):
         self.fileMenu.addAction('Show database statistics...', self.showStats)
@@ -1025,9 +797,12 @@ class SampleBrowse(QtWidgets.QMainWindow):
             self.sampleView.horizontalHeader().setSectionResizeMode(c, QtWidgets.QHeaderView.Fixed)
         self.sampleView.resizeRowsToContents()
 
+    def sampleViewDoubleClicked(self, index):
+        if not self.player.isPlaying() and index.column() not in (0, tagsColumn):
+            self.play(index)
+
     def editTags(self, index):
         if self.sampleView.model() != self.dbProxyModel or index.column() != tagsColumn:
-            self.play(index)
             return
         fileIndex = index.sibling(index.row(), 0)
         filePath = fileIndex.data(FilePathRole)
@@ -1264,6 +1039,17 @@ class SampleBrowse(QtWidgets.QMainWindow):
         for column, visible in sampleViewColumns[index].items():
             self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
 
+    def waveViewToggle(self):
+        if not self.currentShownSampleIndex:
+            self.player.stop()
+        elif self.player.isPlaying():
+            self.player.output.suspend()
+        else:
+            if self.player.output.state() == QtMultimedia.QAudio.SuspendedState:
+                self.player.output.resume()
+            else:
+                self.play(self.currentShownSampleIndex)
+
     def playToggle(self, index):
         if not index.isValid():
             self.player.stop()
@@ -1292,7 +1078,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         fileItem = self.sampleView.model().itemFromIndex(fileIndex)
         info = fileIndex.data(InfoRole)
         waveData = fileItem.data(WaveRole)
-        self.waveScene.resetPlayhead(info.samplerate)
+        self.waveView.resetPlayhead(info.samplerate)
         self.player.play(waveData, info)
         fileItem.setIcon(QtGui.QIcon.fromTheme('media-playback-stop'))
 
@@ -1340,13 +1126,14 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
     def setCurrentWave(self, index=None):
         if index is None:
-            self.waveScene.clear()
+            self.waveView.clear()
             self.audioInfoTabWidget.clear()
         if self.currentShownSampleIndex and self.currentShownSampleIndex == index:
             return True
         fileIndex = index.sibling(index.row(), 0)
-#        if self.player.isPlaying():
-#            self.play(fileIndex)
+        if self.player.isPlaying() and self.currentSampleIndex and self.currentSampleIndex != fileIndex:
+            self.play(fileIndex)
+#            self.player.stop()
         info = fileIndex.data(InfoRole)
         if not info:
             fileItem = self.sampleView.model().itemFromIndex(fileIndex)
@@ -1354,7 +1141,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 info = soundfile.info(fileItem.data(FilePathRole))
                 fileItem.setData(info, InfoRole)
             except:
-                self.waveScene.clear()
+                self.waveView.clear()
                 self.audioInfoTabWidget.clear()
                 utils.setItalic(fileItem)
                 return False
@@ -1381,8 +1168,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             if not len(waveData):
                 return False
             fileItem.setData(waveData, WaveRole)
-        self.waveScene.drawWave(waveData, self.waveView.viewport().rect().width())
-        self.waveView.fitInView(self.waveScene.waveRect)
+        self.waveView.drawWave(waveData)
 
     def resizeEvent(self, event):
         self.waveView.fitInView(self.waveScene.waveRect)

@@ -156,7 +156,7 @@ class AboutDialog(QtWidgets.QDialog):
                 <a href="https://pypi.python.org/pypi/samplerate">samplerate</a>
             
             <h3>Thanks to:</h3>
-            Faber aka Fabio Vescarelli (<a href="http://www.faberbox.com/">faberbox.com</a>) for his great help in helping mega
+            Faber aka Fabio Vescarelli (<a href="http://www.faberbox.com/">faberbox.com</a>) for his great help in helping me
             to understand the secrets of Python... and his patience ;-)
             ''')
         self.shown = False

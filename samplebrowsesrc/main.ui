@@ -28,7 +28,7 @@
      <number>4</number>
     </property>
     <item row="2" column="1">
-     <widget class="QGraphicsView" name="waveView">
+     <widget class="WaveView" name="waveView">
       <property name="maximumSize">
        <size>
         <width>16777215</width>
@@ -253,6 +253,11 @@
    <class>SampleView</class>
    <extends>QTableView</extends>
    <header>samplebrowsesrc</header>
+  </customwidget>
+  <customwidget>
+   <class>WaveView</class>
+   <extends>QGraphicsView</extends>
+   <header>samplebrowsesrc.widgets</header>
   </customwidget>
  </customwidgets>
  <tabstops>
