@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>324</width>
-    <height>313</height>
+    <width>366</width>
+    <height>307</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,7 +17,7 @@
    <item row="0" column="0">
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>0</number>
+      <number>1</number>
      </property>
      <widget class="QWidget" name="generalTab">
       <attribute name="title">
@@ -36,7 +36,7 @@
           <item row="0" column="1">
            <widget class="QRadioButton" name="startupFsRadio">
             <property name="text">
-             <string>file s&amp;ystem panel</string>
+             <string>f&amp;ile system panel</string>
             </property>
             <property name="checked">
              <bool>true</bool>
@@ -125,7 +125,14 @@
        <string>Database</string>
       </attribute>
       <layout class="QGridLayout" name="gridLayout_5">
-       <item row="5" column="0">
+       <item row="3" column="0" colspan="2">
+        <widget class="QLabel" name="label_3">
+         <property name="text">
+          <string>Database location:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="0">
         <spacer name="verticalSpacer_3">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
@@ -138,7 +145,14 @@
          </property>
         </spacer>
        </item>
-       <item row="4" column="0">
+       <item row="6" column="0" colspan="2">
+        <widget class="Line" name="line_2">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="0">
         <widget class="QPushButton" name="moveDbBtn">
          <property name="enabled">
           <bool>false</bool>
@@ -148,14 +162,14 @@
          </property>
         </widget>
        </item>
-       <item row="0" column="0" colspan="2">
-        <widget class="QLabel" name="label_3">
+       <item row="7" column="1">
+        <widget class="QPushButton" name="clearDbBtn">
          <property name="text">
-          <string>Database location:</string>
+          <string>Clear database...</string>
          </property>
         </widget>
        </item>
-       <item row="2" column="0" colspan="2">
+       <item row="5" column="0" colspan="2">
         <layout class="QHBoxLayout" name="horizontalLayout">
          <item>
           <widget class="QLineEdit" name="dbPathEdit">
@@ -182,22 +196,52 @@
          </item>
         </layout>
        </item>
-       <item row="3" column="0" colspan="2">
-        <widget class="Line" name="line_2">
+       <item row="2" column="0" colspan="2">
+        <widget class="Line" name="line_3">
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
          </property>
         </widget>
        </item>
-       <item row="4" column="1">
-        <widget class="QPushButton" name="clearDbBtn">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>Clear database...</string>
-         </property>
-        </widget>
+       <item row="0" column="0" colspan="2">
+        <layout class="QHBoxLayout" name="horizontalLayout_2">
+         <item>
+          <widget class="QCheckBox" name="dbBackupChk">
+           <property name="text">
+            <string>Automatically backup database every</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSpinBox" name="dbBackupSpin">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>60</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_4">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>minutes</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </item>
       </layout>
      </widget>
@@ -357,7 +401,7 @@
   </connection>
  </connections>
  <buttongroups>
-  <buttongroup name="defaultVolumeGroup"/>
   <buttongroup name="startupViewGroup"/>
+  <buttongroup name="defaultVolumeGroup"/>
  </buttongroups>
 </ui>

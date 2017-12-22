@@ -221,13 +221,29 @@ class SampleBrowse(QtWidgets.QMainWindow):
         rightMenuBar.addMenu(helpMenu)
         self.menubar.setCornerWidget(rightMenuBar)
 
-        settingsAction = helpMenu.addAction(QtGui.QIcon.fromTheme('preferences-system'), 'Preferences...', lambda: SettingsDialog(self).exec_())
+        settingsAction = helpMenu.addAction(QtGui.QIcon.fromTheme('preferences-system'), 'Preferences...', self.showSettings)
         settingsAction.setMenuRole(QtWidgets.QAction.PreferencesRole)
         audioSettingsAction = helpMenu.addAction(QtGui.QIcon.fromTheme('preferences-desktop-multimedia'), 'Audio settings...', self.showAudioSettings)
         audioSettingsAction.setMenuRole(QtWidgets.QAction.PreferencesRole)
         helpMenu.addSeparator()
         aboutAction = helpMenu.addAction(QtGui.QIcon.fromTheme('help-about'), 'About...', AboutDialog(self).exec_)
         aboutAction.setMenuRole(QtWidgets.QAction.AboutRole)
+
+    def showSettings(self):
+        showAll = self.settings.value('showAll', False, type=bool)
+        scanAll = self.settings.value('scanAll', False, type=bool)
+        settingsDialog = SettingsDialog(self)
+        settingsDialog.exec_()
+        browseRefresh = False
+        dbRefresh = False
+        if showAll != self.settings.value('showAll', False, type=bool) or \
+            scanAll != self.settings.value('scanAll', False, type=bool):
+                browseRefresh = True
+        if settingsDialog.dbCleared:
+            self.reloadTags()
+            browseRefresh = True
+            self.browseDb(refresh=True)
+        self.browse(refresh=browseRefresh, dbRefresh=dbRefresh)
 
     def showStats(self):
         StatsDialog(self).exec_()
@@ -254,11 +270,20 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
     def loadDb(self):
         dataDir = QtCore.QDir(QtCore.QStandardPaths.standardLocations(QtCore.QStandardPaths.AppDataLocation)[0])
-        dbFile = QtCore.QFile(dataDir.filePath('sample.sqlite'))
-        if not dbFile.exists():
-            if not dataDir.exists():
-                dataDir.mkpath(dataDir.absolutePath())
-        self.dbConn = sqlite3.connect(dbFile.fileName())
+        defaultDbFile = QtCore.QFileInfo(dataDir.filePath('sample.sqlite'))
+        dbFile = QtCore.QFileInfo(self.settings.value('dbPath', defaultDbFile.absoluteFilePath(), type=str))
+        try:
+            if not dbFile.exists():
+                dbDir = QtCore.QDir(dbFile.absolutePath())
+                if not dbDir.exists():
+                    dbDir.mkpath(dbDir.absolutePath())
+        except Exception as e:
+            dbFile = defaultDbFile
+            if not dbFile.exists():
+                if not dataDir.exists():
+                    dataDir.mkpath(dataDir.absolutePath())
+        self.dbFile = dbFile.absoluteFilePath()
+        self.dbConn = sqlite3.connect(self.dbFile)
         self.sampleDb = self.dbConn.cursor()
         try:
             self.sampleDb.execute('CREATE table samples(filePath varchar primary key, fileName varchar, length float, format varchar, sampleRate int, channels int, tags varchar, preview blob)')
@@ -519,17 +544,25 @@ class SampleBrowse(QtWidgets.QMainWindow):
         if not readable:
             self.audioInfoTabWidget.clear()
     
-    def browse(self, path=None):
+    def browse(self, path=None, refresh=False, dbRefresh=False):
         if path is None:
             if self.currentBrowseDir:
                 if self.currentShownSampleIndex and self.currentShownSampleIndex.model() == self.browseModel:
                     self.sampleView.setCurrentIndex(self.currentShownSampleIndex)
-                return
+                if not (refresh or dbRefresh):
+                    return
+                else:
+                    path = self.currentBrowseDir
             else:
                 path = QtCore.QDir('.')
         else:
             path = QtCore.QDir(path)
-        if self.currentBrowseDir and self.currentBrowseDir == path:
+        if self.currentBrowseDir and self.currentBrowseDir == path and not refresh:
+            if dbRefresh:
+                for row in range(self.browseModel.rowCount()):
+                    fileItem = self.browseModel.item(row, 0)
+                    self.sampleDb.execute('SELECT * FROM samples WHERE filePath=?', (fileItem.data(FilePathRole), ))
+                    utils.setBold(fileItem, True if self.sampleDb.fetchall() else False)
             return
         self.currentBrowseDir = path
         self.browseModel.clear()
@@ -751,15 +784,18 @@ class SampleBrowse(QtWidgets.QMainWindow):
         if not fileName:
             fileName = QtCore.QFile(filePath).fileName()
         if not info:
-            soundfile.info(filePath)
+            try:
+                soundfile.info(filePath)
+            except:
+                return
         self.sampleDb.execute(
             'INSERT OR REPLACE INTO samples values (?,?,?,?,?,?,?,?,?)', 
             (filePath, fileName, float(info.frames) / info.samplerate, info.format, info.samplerate, info.channels, info.subtype, tags, preview), 
             )
 
-    def browseDb(self, query=None, force=True):
+    def browseDb(self, query=None, refresh=True):
         if query is None:
-            if not force and (self.currentDbQuery and not self.sampleDbUpdated):
+            if not refresh and (self.currentDbQuery and not self.sampleDbUpdated):
                 if self.currentShownSampleIndex and self.currentShownSampleIndex.model() == self.dbModel:
                     self.sampleView.setCurrentIndex(self.currentShownSampleIndex)
                 return
@@ -942,7 +978,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
     def dbTreeViewDoubleClicked(self, index):
         if self.dbTreeProxyModel.mapToSource(index) == self.dbTreeModel.index(0, 0):
             self.currentDbQuery = None
-            self.browseDb(force=True)
+            self.browseDb(refresh=True)
             return
         #TODO this has to be implemented along with browseDb
         self.dbModel.clear()
