@@ -106,7 +106,7 @@ class SettingsDialog(QtWidgets.QDialog):
         self.showAllChk.setChecked(self.settings.value('showAll', False, type=bool))
 
         self.dbBackupChk.setChecked(self.settings.value('dbBackup', True, type=bool))
-        self.dbBackupSpin.setValue(self.settings.value('dbBackupInterval', 1, type=int))
+        self.dbBackupSpin.setValue(self.settings.value('dbBackupInterval', 5, type=int))
         dataDir = QtCore.QDir(QtCore.QStandardPaths.standardLocations(QtCore.QStandardPaths.AppDataLocation)[0])
         dbFile = QtCore.QFile(dataDir.filePath('sample.sqlite'))
         self.dbPathEdit.setText(self.settings.value('dbPath', dbFile.fileName(), type=str))
@@ -130,6 +130,8 @@ class SettingsDialog(QtWidgets.QDialog):
             self.settings.setValue('showAll', True)
         else:
             self.settings.remove('showAll')
+        self.settings.setValue('dbBackup', self.dbBackupChk.isChecked())
+        self.settings.setValue('dbBackupInterval', self.dbBackupSpin.value())
         self.settings.sync()
 
 

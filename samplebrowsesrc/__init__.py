@@ -203,6 +203,31 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
         self.doMenu()
 
+        self.dbBackupTimer = QtCore.QTimer()
+        self.dbBackupTimer.timeout.connect(self.doDbBackup)
+        if self.settings.value('dbBackup', True, type=bool):
+            self.dbBackupTimer.setInterval(self.settings.value('dbBackupInterval', 5, type=int) * 60000)
+            self.dbBackupTimer.start()
+#        self.doDbBackup()
+
+    def doDbBackup(self):
+        #TODO: add lock to database
+        dbFilePath = self.dbFile.absoluteFilePath()
+        bkpFilePath = dbFilePath + '.bkp'
+        bkpPrevFilePath = bkpFilePath + '.old'
+        try:
+            if QtCore.QFile.exists(bkpFilePath):
+                try:
+                    if QtCore.QFile.exists(bkpPrevFilePath):
+                        assert QtCore.QFile.remove(bkpPrevFilePath)
+                    assert QtCore.QFile.copy(bkpFilePath, bkpPrevFilePath)
+                except:
+                    print('Db backup: write error for second backup')
+                assert QtCore.QFile.remove(bkpFilePath)
+            assert QtCore.QFile.copy(dbFilePath, bkpFilePath)
+        except:
+            print('Db backup: write error')
+
     def waveViewMousePressEvent(self, event):
         if self.player.isPlaying():
             pos = self.waveView.mapToScene(event.pos()).x()
@@ -244,6 +269,11 @@ class SampleBrowse(QtWidgets.QMainWindow):
             browseRefresh = True
             self.browseDb(refresh=True)
         self.browse(refresh=browseRefresh, dbRefresh=dbRefresh)
+        if self.settings.value('dbBackup', True, type=bool):
+            self.dbBackupTimer.setInterval(self.settings.value('dbBackupInterval', 5, type=int) * 60000)
+            self.dbBackupTimer.start()
+        else:
+            self.dbBackupTimer.stop()
 
     def showStats(self):
         StatsDialog(self).exec_()
@@ -271,19 +301,18 @@ class SampleBrowse(QtWidgets.QMainWindow):
     def loadDb(self):
         dataDir = QtCore.QDir(QtCore.QStandardPaths.standardLocations(QtCore.QStandardPaths.AppDataLocation)[0])
         defaultDbFile = QtCore.QFileInfo(dataDir.filePath('sample.sqlite'))
-        dbFile = QtCore.QFileInfo(self.settings.value('dbPath', defaultDbFile.absoluteFilePath(), type=str))
+        self.dbFile = QtCore.QFileInfo(self.settings.value('dbPath', defaultDbFile.absoluteFilePath(), type=str))
         try:
-            if not dbFile.exists():
-                dbDir = QtCore.QDir(dbFile.absolutePath())
+            if not self.dbFile.exists():
+                dbDir = QtCore.QDir(self.dbFile.absolutePath())
                 if not dbDir.exists():
                     dbDir.mkpath(dbDir.absolutePath())
         except Exception as e:
-            dbFile = defaultDbFile
-            if not dbFile.exists():
+            self.dbFile = defaultDbFile
+            if not self.dbFile.exists():
                 if not dataDir.exists():
                     dataDir.mkpath(dataDir.absolutePath())
-        self.dbFile = dbFile.absoluteFilePath()
-        self.dbConn = sqlite3.connect(self.dbFile)
+        self.dbConn = sqlite3.connect(self.dbFile.absoluteFilePath())
         self.sampleDb = self.dbConn.cursor()
         try:
             self.sampleDb.execute('CREATE table samples(filePath varchar primary key, fileName varchar, length float, format varchar, sampleRate int, channels int, tags varchar, preview blob)')
