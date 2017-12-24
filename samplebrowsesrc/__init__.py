@@ -9,6 +9,7 @@ from PyQt5 import QtCore, QtGui, QtMultimedia, QtWidgets, uic
 import soundfile
 
 import samplebrowsesrc.icons
+from samplebrowsesrc.sampledb import *
 from samplebrowsesrc.player import *
 from samplebrowsesrc.widgets import *
 from samplebrowsesrc.constants import *
@@ -82,7 +83,20 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.fsSplitter.setStretchFactor(0, 50)
         self.fsSplitter.setStretchFactor(1, 1)
 
-        self.loadDb()
+#        self.loadDb()
+        self.sampleDb = SampleDb(self)
+        dbPathMode = 0
+        while not self.sampleDb.initialized:
+            dbSelectDialog = DbSelectDialog(self, dbPathMode)
+            dbPathMode, dbFilePath = dbSelectDialog.exec_()
+            if dbSelectDialog.status == dbSelectDialog.dbOk:
+                self.sampleDb.loadDb(dbFilePath)
+            elif dbSelectDialog.status == dbSelectDialog.dbWillCreate:
+                self.sampleDb.createDb(dbFilePath)
+                self.sampleDb.loadDb(dbFilePath)
+        if dbPathMode in (2, 3):
+            self.settings.setValue('dbPath', dbFilePath)
+        self.tagColorsDict = self.sampleDb.tagColorsDict
 
         self.dbSplitter = AdvancedSplitter(QtCore.Qt.Vertical)
         self.browserStackedLayout.addWidget(self.dbSplitter)
@@ -119,10 +133,6 @@ class SampleBrowse(QtWidgets.QMainWindow):
             self.dbDirView.header().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents), 
             ] if self.dbDirModel.rowCount() else None)
         self.dbDirModel.updateTree()
-#        self.dbDirView.resizeColumnToContents(1)
-        #TODO: wtf?!
-#        self.dbDirView.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-#        self.dbDirView.header().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
 
         self.dbSplitter.setStretchFactor(0, 50)
         self.dbSplitter.setStretchFactor(1, 1)
@@ -203,31 +213,6 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
         self.doMenu()
 
-        self.dbBackupTimer = QtCore.QTimer()
-        self.dbBackupTimer.timeout.connect(self.doDbBackup)
-        if self.settings.value('dbBackup', True, type=bool):
-            self.dbBackupTimer.setInterval(self.settings.value('dbBackupInterval', 5, type=int) * 60000)
-            self.dbBackupTimer.start()
-#        self.doDbBackup()
-
-    def doDbBackup(self):
-        #TODO: add lock to database
-        dbFilePath = self.dbFile.absoluteFilePath()
-        bkpFilePath = dbFilePath + '.bkp'
-        bkpPrevFilePath = bkpFilePath + '.old'
-        try:
-            if QtCore.QFile.exists(bkpFilePath):
-                try:
-                    if QtCore.QFile.exists(bkpPrevFilePath):
-                        assert QtCore.QFile.remove(bkpPrevFilePath)
-                    assert QtCore.QFile.copy(bkpFilePath, bkpPrevFilePath)
-                except:
-                    print('Db backup: write error for second backup')
-                assert QtCore.QFile.remove(bkpFilePath)
-            assert QtCore.QFile.copy(dbFilePath, bkpFilePath)
-        except:
-            print('Db backup: write error')
-
     def waveViewMousePressEvent(self, event):
         if self.player.isPlaying():
             pos = self.waveView.mapToScene(event.pos()).x()
@@ -294,11 +279,13 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.settings.setValue('previousView', self.browseSelectGroup.checkedId())
         self.settings.setValue('lastGeometry', self.geometry())
         self.settings.sync()
-        self.dbConn.commit()
-        self.dbConn.close()
+        self.sampleDb.commit()
+        self.sampleDb.close()
         QtWidgets.QApplication.quit()
 
     def loadDb(self):
+        self.sampleDb = SampleDb(self)
+        return
         dataDir = QtCore.QDir(QtCore.QStandardPaths.standardLocations(QtCore.QStandardPaths.AppDataLocation)[0])
         defaultDbFile = QtCore.QFileInfo(dataDir.filePath('sample.sqlite'))
         self.dbFile = QtCore.QFileInfo(self.settings.value('dbPath', defaultDbFile.absoluteFilePath(), type=str))
@@ -315,9 +302,10 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.dbConn = sqlite3.connect(self.dbFile.absoluteFilePath())
         self.sampleDb = self.dbConn.cursor()
         try:
+            print(self.sampleDb.execute('SELECT name FROM sqlite_master WHERE type="table" AND name="samples"').fetchone())
             self.sampleDb.execute('CREATE table samples(filePath varchar primary key, fileName varchar, length float, format varchar, sampleRate int, channels int, tags varchar, preview blob)')
         except Exception as e:
-            print(e)
+            print(e, type(e), dir(e))
             #migrate
             self.sampleDb.execute('PRAGMA table_info(samples)')
             if len(self.sampleDb.fetchall()) != len(allColumns):
@@ -329,7 +317,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             self.sampleDb.execute('CREATE table tagColors(tag varchar primary key, foreground varchar, background varchar)')
         except Exception as e:
             print(e)
-        self.dbConn.commit()
+        self.sampleDb.commit()
         self.tagColorsDict = {}
         self.sampleDb.execute('SELECT tag,foreground,background FROM tagColors')
         for res in self.sampleDb.fetchall():
@@ -474,7 +462,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         for filePath, fileName, info, tags in res:
             fileNameList.append(fileName)
             self._addSampleToDb(filePath, fileName, info, ','.join(tags))
-        self.dbConn.commit()
+        self.sampleDb.commit()
         self.reloadTags()
         self.dbDirModel.updateTree()
         if self.sampleView.model() == self.browseModel and self.currentBrowseDir and dirPath in self.currentBrowseDir.absolutePath():
@@ -682,7 +670,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 'DELETE FROM samples WHERE filePath=?', 
                 (filePath, )
                 )
-            self.dbConn.commit()
+            self.sampleDb.commit()
             self.reloadTags()
             if self.sampleView.model() == self.dbProxyModel:
                 self.dbModel.takeRow(fileIndex.row())
@@ -760,7 +748,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 self.sampleView.model().setData(index, res, TagsRole)
                 self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (','.join(res), filePath))
             self.reloadTags()
-            self.dbConn.commit()
+            self.sampleDb.commit()
         elif res == removeAllAction:
             if RemoveSamplesDialog(self, exist).exec_():
                 fileNames = [i.data(FilePathRole) for i in exist]
@@ -775,7 +763,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                             'DELETE FROM samples WHERE filePath IN ({})'.format(','.join(['?' for i in items])), 
                             items
                             )
-                self.dbConn.commit()
+                self.sampleDb.commit()
                 if self.sampleView.model() == self.dbProxyModel:
                     for index in sorted(exist, key=lambda index: index.row(), reverse=True):
                         self.dbModel.takeRow(index.row())
@@ -791,7 +779,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             fileName = fileIndex.data()
             info = fileIndex.data(InfoRole)
             self._addSampleToDb(filePath, fileName, info, tags)
-        self.dbConn.commit()
+        self.sampleDb.commit()
         self.reloadTags()
         self.dbDirModel.updateTree()
 #        if self.sampleView.model() == self.browseModel:
@@ -801,7 +789,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
     def addSampleToDb(self, filePath, fileName=None, info=None, tags='', preview=None):
         self._addSampleToDb(filePath, fileName, info, tags, preview)
-        self.dbConn.commit()
+        self.sampleDb.commit()
         self.reloadTags()
         if self.sampleView.model() == self.browseModel:
             self.sampleDbUpdated = True
@@ -836,7 +824,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.sampleDbUpdated = False
         self.dbModel.clear()
         self.dbModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Bits', 'Tags', 'Preview'])
-        for column, visible in dbColumns.items():
+        for column, visible in dbViewColumns.items():
             self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
         for row in self.sampleDb.execute(*query):
             filePath, fileName, length, format, sampleRate, channels, subtype, tags, data = row
@@ -881,7 +869,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             return
         self.sampleView.model().setData(index, res, TagsRole)
         self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (','.join(res), filePath))
-        self.dbConn.commit()
+        self.sampleDb.commit()
         self.reloadTags()
         self.sampleView.resizeColumnToContents(tagsColumn)
 
@@ -907,7 +895,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 (tag, foregroundColor.name(), backgroundColor.name())
                 )
             self.tagColorsDict[tag] = foregroundColor, backgroundColor
-        self.dbConn.commit()
+        self.sampleDb.commit()
         self.sampleView.viewport().update()
 
     def tagRenamed(self, newTag, oldTag):
@@ -932,7 +920,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 else:
                     newTags.add(tag)
             self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (','.join(sorted(newTags)), filePath))
-            self.dbConn.commit()
+            self.sampleDb.commit()
             sampleMatch = self.dbModel.match(self.dbModel.index(0, 0), FilePathRole, filePath, flags=QtCore.Qt.MatchExactly)
             if not sampleMatch:
                 continue
@@ -988,7 +976,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                     self.tagColorsDict.pop(currentTag)
                 except:
                     pass
-                self.dbConn.commit()
+                self.sampleDb.commit()
                 self.dbTreeModel.itemFromIndex(index.parent()).takeRow(index.row())
 
     def reloadTags(self):
@@ -1012,7 +1000,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         #TODO this has to be implemented along with browseDb
         self.dbModel.clear()
         self.dbModel.setHorizontalHeaderLabels(['Name', 'Path', 'Length', 'Format', 'Rate', 'Ch.', 'Bits', 'Tags', 'Preview'])
-        for column, visible in dbColumns.items():
+        for column, visible in dbViewColumns.items():
             self.sampleView.horizontalHeader().setSectionHidden(column, not visible)
 
         currentTag = index.data()
@@ -1077,13 +1065,13 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 tagsIndex = fileIndex.sibling(fileIndex.row(), tagsColumn)
                 self.dbModel.setData(tagsIndex, tags, TagsRole)
         self.sampleView.viewport().update()
-        self.dbConn.commit()
+        self.sampleDb.commit()
         self.reloadTags()
 
     def importSamplesWithTags(self, sampleList, tagIndex):
         for filePath, fileName, info, tags in sampleList:
             self._addSampleToDb(filePath, fileName, info, ','.join(tags))
-        self.dbConn.commit()
+        self.sampleDb.commit()
         self.reloadTags()
         if tagIndex.isValid():
             self.dbTreeViewDoubleClicked(tagIndex)
@@ -1184,7 +1172,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         if not self.sampleDb.fetchone():
             return
         self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (','.join(tagList), filePath))
-        self.dbConn.commit()
+        self.sampleDb.commit()
         self.reloadTags()
         sampleMatch = self.dbModel.match(self.dbModel.index(0, 0), FilePathRole, filePath, flags=QtCore.Qt.MatchExactly)
         if sampleMatch:

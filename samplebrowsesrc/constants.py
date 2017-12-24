@@ -42,18 +42,21 @@ channelsLabels = {
     8: '7.1'
     }
 
+dbFields = ['filePath', 'fileName', 'length', 'format', 'sampleRate', 'channels', 'subtype', 'tags', 'preview']
+dbFieldsOld = ['filePath', 'fileName', 'length', 'format', 'sampleRate', 'channels', 'tags', 'preview']
+
 fileNameColumn, dirColumn, lengthColumn, formatColumn, rateColumn, channelsColumn, subtypeColumn, tagsColumn, previewColumn = range(9)
 allColumns = fileNameColumn, dirColumn, lengthColumn, formatColumn, rateColumn, channelsColumn, subtypeColumn, tagsColumn, previewColumn
 _visibleColumns = fileNameColumn, lengthColumn, formatColumn, rateColumn, channelsColumn, subtypeColumn
 _commonColumns = {c: True if c in _visibleColumns else False for c in allColumns}
 browseColumns = _commonColumns.copy()
-dbColumns = _commonColumns.copy()
-dbColumns.update({
+dbViewColumns = _commonColumns.copy()
+dbViewColumns.update({
     dirColumn: True, 
     tagsColumn: True, 
 #    previewColumn: True;
     })
-sampleViewColumns = browseColumns, dbColumns
+sampleViewColumns = browseColumns, dbViewColumns
 
 ValidRole = QtCore.Qt.UserRole + 1
 DataRole = QtCore.Qt.UserRole + 1
@@ -71,3 +74,11 @@ WaveRole = InfoRole + 1
 TagsRole = WaveRole + 1
 PreviewRole = TagsRole + 1
 
+StatusBackup, StatusSamplesAdded, StatusSamplesRemoved, StatusTagRenamed, StatusTagChanged = range(5)
+StatusDict = {
+    StatusBackup: lambda done: 'Backup completed.' if done else 'Backup failed!', 
+    StatusSamplesAdded: lambda n: '{} sample{} added to database'.format(n, 's' if n>1 else ''), 
+    StatusSamplesRemoved: lambda n: '{} sample{} removed from database'.format(n, 's' if n>1 else ''), 
+    StatusTagRenamed: lambda new, old: 'Tag "{}" renamed to "{}"'.format(old, new), 
+    StatusTagChanged: lambda tag: 'Tag "{}" changed'.format(tag), 
+    }

@@ -1,3 +1,4 @@
+from samplebrowsesrc.dialogs.dbselect import *
 from samplebrowsesrc.dialogs.settings import *
 from samplebrowsesrc.dialogs.audiosettings import *
 from samplebrowsesrc.dialogs.statistics import *

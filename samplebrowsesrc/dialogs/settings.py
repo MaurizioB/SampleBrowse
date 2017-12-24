@@ -67,7 +67,6 @@ class SettingsDialog(QtWidgets.QDialog):
         uic.loadUi('{}/settings.ui'.format(os.path.dirname(utils.__file__)), self)
         self.settings = QtCore.QSettings()
         self.sampleDb = parent.sampleDb
-        self.dbConn = parent.dbConn
 
         self.startupViewGroup.setId(self.startupFsRadio, 0)
         self.startupViewGroup.setId(self.startupDbRadio, 1)
@@ -89,7 +88,7 @@ class SettingsDialog(QtWidgets.QDialog):
             if clearDbMessageBox.clearTagsChk.isChecked():
                 self.sampleDb.execute('DELETE FROM tagColors')
             self.dbCleared = True
-            self.dbConn.commit()
+            self.sampleDb.commit()
 
     def showAudioSettings(self):
         res = AudioSettingsDialog(self.parent(), self).exec_()
