@@ -109,7 +109,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
         self.dbSplitter = AdvancedSplitter(QtCore.Qt.Vertical)
         self.browserStackedLayout.addWidget(self.dbSplitter)
-        self.dbTreeView = HoverDecorator(DbTreeView)(hoverText='Right click for context menu', parent=self)
+        self.dbTreeView = HoverDecorator(DbTreeView)(hoverText='Single click to filter by tags, right click for menu', parent=self)
         self.statusBar.addHoverWidget(self.dbTreeView)
         self.dbTreeView.samplesAddedToTag.connect(self.addSamplesToTag)
         self.dbTreeView.samplesImported.connect(self.importSamplesWithTags)

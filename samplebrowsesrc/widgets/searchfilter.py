@@ -563,7 +563,7 @@ class LengthRangeFilterWidget(FilterWidget):
             None, 
             SpinRangeSelectionWidget, 
             )
-        self.name = 'Lenght'
+        self.name = 'Length'
 
     def data(self):
         return rangeData(self.greater, self.less) if self.valid else None
@@ -579,17 +579,17 @@ class LengthRangeFilterWidget(FilterWidget):
         elif less is None:
             greaterValue, greaterEqual = greater
             symbol = '≥' if greaterEqual else '>'
-            self.displayValues = ['{} {}s'.format(symbol, timeStr(greaterValue))]
+            self.displayValues = ['{} {}s'.format(symbol, timeStr(greaterValue, leading=2))]
         elif greater is None:
             lessValue, lessEqual = less
             symbol = '≤' if lessEqual else '<'
-            self.displayValues = ['{} {}s'.format(symbol, timeStr(lessValue))]
+            self.displayValues = ['{} {}s'.format(symbol, timeStr(lessValue, leading=2))]
         else:
             lessValue, lessEqual = less
             lessSymbol = '≤' if lessEqual else '<'
             greaterValue, greaterEqual = greater
             greaterSymbol = '≤' if greaterEqual else '<'
-            self.displayValues = ['{greater:}s {greaterSymbol} T {lessSymbol} {less}s'.format(greater=timeStr(greaterValue), greaterSymbol=greaterSymbol, lessSymbol=lessSymbol, less=timeStr(lessValue))]
+            self.displayValues = ['{greater:}s {greaterSymbol} T {lessSymbol} {less}s'.format(greater=timeStr(greaterValue, leading=2), greaterSymbol=greaterSymbol, lessSymbol=lessSymbol, less=timeStr(lessValue, leading=2))]
             if greater >= less:
                 self.valid = False
         self.contentWidth = self.fontMetrics().width(self.displayValues[0]) + self.hMargin * 2
@@ -674,13 +674,20 @@ class FilterContainer(QtWidgets.QFrame):
         self.redrawFilters()
 
     def updateFilters(self):
+        filterNames = []
         filterData = []
         for filter in self.filters:
             if not filter.valid:
                 continue
+            filterNames.append(filter.name)
             filterData.append((filter.field, filter.data()))
         self.filtersChanged.emit(filterData)
-        self.hoverText = 'Active filters: ' + ', '.join([filter.name for filter in self.filters if filter.valid])
+        if filterData:
+            self.hoverText = 'Active filters: ' + ', '.join(filterNames)
+        elif self.filters:
+            self.hoverText = 'No valid filters selected, set them or add another filter.'
+        else:
+            self.hoverText = 'No filter selected, use the "+" button.'
 
     def minimumSizeHint(self):
         return QtCore.QSize(240, self.fontMetrics().height() + 18)
