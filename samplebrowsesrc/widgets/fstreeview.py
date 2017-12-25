@@ -1,5 +1,8 @@
 from PyQt5 import QtCore, QtWidgets
 
+from samplebrowsesrc.utils import HoverDecorator
+
+@HoverDecorator
 class FsTreeView(QtWidgets.QTreeView):
     def __init__(self, *args, **kwargs):
         QtWidgets.QTreeView.__init__(self, *args, **kwargs)

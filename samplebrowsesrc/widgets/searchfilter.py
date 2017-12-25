@@ -4,7 +4,7 @@ import soundfile
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from samplebrowsesrc.constants import *
-from samplebrowsesrc.utils import *
+from samplebrowsesrc.utils import HoverDecorator, timeStr
 
 rangeData = namedtuple('rangeData', 'greater less')
 contextData = namedtuple('contextData', 'full short')
@@ -60,6 +60,7 @@ class FilterWidget(QtWidgets.QWidget):
         self.editorClass = editorClass
         self.editorVisible = False
         self.setFilter(filter)
+        self.name = ''
 
     def data(self):
         return self.values if self.valid else None
@@ -212,7 +213,7 @@ class FormatFilterWidget(FilterWidget):
             ListSelectionWidget, 
             filter
             )
-        
+        self.name = 'File format'
 
 class SampleRateFilterWidget(FilterWidget):
     def __init__(self, parent, filter=None):
@@ -225,6 +226,7 @@ class SampleRateFilterWidget(FilterWidget):
             ListSelectionWidget, 
             filter
             )
+        self.name = 'Sample rate'
 
 
 class ChannelsFilterWidget(FilterWidget):
@@ -238,6 +240,7 @@ class ChannelsFilterWidget(FilterWidget):
             ListSelectionWidget, 
             filter
             )
+        self.name = 'Channels'
 
 
 class GrayedCheckBox(QtWidgets.QCheckBox):
@@ -336,6 +339,7 @@ class SampleRateRangeFilterWidget(FilterWidget):
             ComboRangeSelectionWidget, 
             filter
             )
+        self.name = 'Sample rate range'
 
     def data(self):
         return rangeData(self.greater, self.less) if self.valid else None
@@ -559,6 +563,7 @@ class LengthRangeFilterWidget(FilterWidget):
             None, 
             SpinRangeSelectionWidget, 
             )
+        self.name = 'Lenght'
 
     def data(self):
         return rangeData(self.greater, self.less) if self.valid else None
@@ -592,6 +597,7 @@ class LengthRangeFilterWidget(FilterWidget):
         self.changed.emit()
 
 
+@HoverDecorator
 class FilterContainer(QtWidgets.QFrame):
     filterTypes = {
         'format': FormatFilterWidget, 
@@ -614,6 +620,7 @@ class FilterContainer(QtWidgets.QFrame):
         self.innerWidget = QtWidgets.QWidget()
         layout.addWidget(self.innerWidget)
         self.filters = []
+        self.hoverText = 'No filter selected, use the "+" button.'
 
     def addFilter(self, filterType, applyFilter=None):
         filterClass = self.filterTypes[filterType]
@@ -673,15 +680,18 @@ class FilterContainer(QtWidgets.QFrame):
                 continue
             filterData.append((filter.field, filter.data()))
         self.filtersChanged.emit(filterData)
+        self.hoverText = 'Active filters: ' + ', '.join([filter.name for filter in self.filters if filter.valid])
 
     def minimumSizeHint(self):
         return QtCore.QSize(240, self.fontMetrics().height() + 18)
 
 
+@HoverDecorator
 class FilterLineEdit(QtWidgets.QLineEdit):
     def __init__(self, *args, **kwargs):
         QtWidgets.QLineEdit.__init__(self, *args, **kwargs)
         self.setClearButtonEnabled(True)
+        self.hoverText = 'Filter samples by name'
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Escape:
@@ -709,7 +719,8 @@ class MainFilterWidget(QtWidgets.QWidget):
         self.filterData = []
         layout.addWidget(self.filterWidget, 1, 1)
 
-        self.addFilterBtn = QtWidgets.QToolButton()
+        self.addFilterBtn = HoverDecorator(QtWidgets.QToolButton)()
+        self.addFilterBtn.setHoverText('Add search filters')
         self.addFilterBtn.setText('+')
         self.addFilterBtn.setAutoRaise(True)
         self.addFilterBtn.setArrowType(QtCore.Qt.NoArrow)
@@ -719,6 +730,8 @@ class MainFilterWidget(QtWidgets.QWidget):
         self.filterMenu = QtWidgets.QMenu(self)
         self.filterMenu.aboutToShow.connect(self.checkMenuFilters)
         self.addFilterBtn.setMenu(self.filterMenu)
+
+        self.hoverWidgets = [self.nameSearchEdit, self.filterWidget, self.addFilterBtn]
 
         formatMenu = self.filterMenu.addMenu('Formats')
         formatMenu.menuAction().setData(FormatFilterWidget)

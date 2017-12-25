@@ -1,6 +1,7 @@
 import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+from samplebrowsesrc.utils import HoverDecorator
 
 class WaveScene(QtWidgets.QGraphicsScene):
     _orange = QtGui.QColor()
@@ -154,6 +155,7 @@ class WaveViewPlayer(QtWidgets.QFrame):
         self.stopBtn.setEnabled(False)
 
 
+@HoverDecorator
 class WaveView(QtWidgets.QGraphicsView):
     toggle = QtCore.pyqtSignal()
     stop = QtCore.pyqtSignal()
@@ -169,8 +171,10 @@ class WaveView(QtWidgets.QGraphicsView):
     def clear(self):
         self.waveScene.clear()
         self.playerFrame.hide()
+        self.setEnabled(False)
 
     def drawWave(self, waveData):
+        self.setEnabled(True)
         self.waveScene.drawWave(waveData, self.viewport().rect().width())
         self.fitInView(self.waveScene.waveRect)
         self.playerFrame.show()

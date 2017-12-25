@@ -55,24 +55,24 @@ class DbSelectDialog(QtWidgets.QDialog):
         self.dbBrowseBtn.clicked.connect(lambda: self.dbBrowseFunc())
         self.OkBtn = self.buttonBox.button(self.buttonBox.Ok)
         self.dbPathCombo.setCurrentIndex(pathMode)
-        self.status = self.dbError
+        self.state = self.dbError
         self.updateDbPath(pathMode)
 
-    def setStatus(self, status):
-        self.status = status
-        self.dbStatusLbl.setText('<img src=":/icons/TangoCustom/16x16/{}.png"> {}'.format(*self.statusInfo[status]))
+    def setStatus(self, state):
+        self.state = state
+        self.dbStatusLbl.setText('<img src=":/icons/TangoCustom/16x16/{}.png"> {}'.format(*self.statusInfo[state]))
 
     def dbBrowseCustomPath(self):
         browseDialog = BrowseCustomPathDialog(self, 'Select custom path', self.customDbFilePath.absolutePath())
         if browseDialog.exec_():
             self.customDbFilePath.setFile(QtCore.QDir(browseDialog.selectedFiles()[0]), 'sample.sqlite')
-            status = self.testDbFile(self.customDbFilePath, True)
+            state = self.testDbFile(self.customDbFilePath, True)
             self.dbPathEdit.setText(self.customDbFilePath.absoluteFilePath())
-            if status in (self.dbOk, self.dbSpaceWarning, self.dbNotExists):
+            if state in (self.dbOk, self.dbSpaceWarning, self.dbNotExists):
                 self.OkBtn.setEnabled(True)
             else:
                 self.OkBtn.setEnabled(False)
-            self.setStatus(status)
+            self.setStatus(state)
 
     def dbBrowseExistingFile(self):
         res = QtWidgets.QFileDialog.getOpenFileName(
@@ -82,13 +82,13 @@ class DbSelectDialog(QtWidgets.QDialog):
             )
         if res and QtCore.QFile.exists(res[0]):
             self.existingDbFilePath.setFile(res[0])
-            status = self.testDbFile(self.existingDbFilePath, True)
+            state = self.testDbFile(self.existingDbFilePath, True)
             self.dbPathEdit.setText(self.existingDbFilePath.absoluteFilePath())
-            if status in (self.dbOk, self.dbSpaceWarning):
+            if state in (self.dbOk, self.dbSpaceWarning):
                 self.OkBtn.setEnabled(True)
             else:
                 self.OkBtn.setEnabled(False)
-            self.setStatus(status)
+            self.setStatus(state)
 
     def testDbFile(self, dbFile, willCreate=False):
         if not QtCore.QFileInfo(dbFile.absolutePath()).isWritable():
@@ -116,23 +116,23 @@ class DbSelectDialog(QtWidgets.QDialog):
             dataDir, defaultDbFile = self.getDefaults()
             self.dbPathEdit.setText(defaultDbFile.absoluteFilePath())
             self.dbBrowseBtn.setEnabled(False)
-            status = self.testDbFile(defaultDbFile, True)
+            state = self.testDbFile(defaultDbFile, True)
         elif index == 1:
             self.dbPathEdit.setText(self.tempDbFilePath.absoluteFilePath())
             self.dbBrowseBtn.setEnabled(False)
-            status = self.testDbFile(self.tempDbFilePath, True)
+            state = self.testDbFile(self.tempDbFilePath, True)
         elif index == 2:
             self.dbPathEdit.setText(self.customDbFilePath.absoluteFilePath())
             self.dbBrowseBtn.setEnabled(True)
             self.dbBrowseFunc = self.dbBrowseCustomPath
-            status = self.testDbFile(self.customDbFilePath, True)
+            state = self.testDbFile(self.customDbFilePath, True)
         else:
             self.dbPathEdit.setText(self.existingDbFilePath.absoluteFilePath())
             self.dbBrowseBtn.setEnabled(True)
             self.dbBrowseFunc = self.dbBrowseExistingFile
-            status = self.testDbFile(self.existingDbFilePath, False)
-        self.setStatus(status)
-        self.OkBtn.setEnabled(status in (self.dbOk, self.dbSpaceWarning, self.dbNotExists, self.dbWillCreate))
+            state = self.testDbFile(self.existingDbFilePath, False)
+        self.setStatus(state)
+        self.OkBtn.setEnabled(state in (self.dbOk, self.dbSpaceWarning, self.dbNotExists, self.dbWillCreate))
 
     def getDefaults(self):
         dataDir = QtCore.QDir(QtCore.QStandardPaths.standardLocations(QtCore.QStandardPaths.AppDataLocation)[0])

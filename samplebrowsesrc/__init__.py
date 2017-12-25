@@ -31,6 +31,12 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.sampleSize = self.player.sampleSize
         self.sampleRate = self.player.sampleRate
 
+        self.statusBar = StatusBar()
+        self.setStatusBar(self.statusBar)
+
+        self.sampleView.setHoverText('Press the spacebar while playing to proceed to the next file, Shift-spacebar for the previous one')
+        self.statusBar.addHoverWidget(self.sampleView)
+
         self.browseSelectGroup.setId(self.browseSystemBtn, 0)
         self.browseSelectGroup.setId(self.browseDbBtn, 1)
         self.volumeSlider.mousePressEvent = self.volumeSliderMousePressEvent
@@ -43,8 +49,11 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
         self.fsSplitter = AdvancedSplitter(QtCore.Qt.Vertical)
         self.browserStackedLayout.addWidget(self.fsSplitter)
-        self.fsView = FsTreeView()
+        self.fsView = FsTreeView(hoverText='Right click for context menu')
         self.fsSplitter.addWidget(self.fsView, collapsible=False)
+
+        self.statusBar.addHoverWidget(self.fsView)
+
         self.fsView.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.fsView.setHeaderHidden(True)
         self.favouritesTable = QtWidgets.QTableView()
@@ -83,15 +92,15 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.fsSplitter.setStretchFactor(0, 50)
         self.fsSplitter.setStretchFactor(1, 1)
 
-#        self.loadDb()
         self.sampleDb = SampleDb(self)
+        self.sampleDb.backupDone.connect(lambda state: self.statusBar.addMessage(StatusBackup, state))
         dbPathMode = 0
         while not self.sampleDb.initialized:
             dbSelectDialog = DbSelectDialog(self, dbPathMode)
             dbPathMode, dbFilePath = dbSelectDialog.exec_()
-            if dbSelectDialog.status == dbSelectDialog.dbOk:
+            if dbSelectDialog.state == dbSelectDialog.dbOk:
                 self.sampleDb.loadDb(dbFilePath)
-            elif dbSelectDialog.status == dbSelectDialog.dbWillCreate:
+            elif dbSelectDialog.state == dbSelectDialog.dbWillCreate:
                 self.sampleDb.createDb(dbFilePath)
                 self.sampleDb.loadDb(dbFilePath)
         if dbPathMode in (2, 3):
@@ -100,7 +109,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
         self.dbSplitter = AdvancedSplitter(QtCore.Qt.Vertical)
         self.browserStackedLayout.addWidget(self.dbSplitter)
-        self.dbTreeView = DbTreeView(self)
+        self.dbTreeView = HoverDecorator(DbTreeView)(hoverText='Right click for context menu', parent=self)
+        self.statusBar.addHoverWidget(self.dbTreeView)
         self.dbTreeView.samplesAddedToTag.connect(self.addSamplesToTag)
         self.dbTreeView.samplesImported.connect(self.importSamplesWithTags)
         self.tagTreeDelegate = TagTreeDelegate()
@@ -137,7 +147,6 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.dbSplitter.setStretchFactor(0, 50)
         self.dbSplitter.setStretchFactor(1, 1)
 
-
         self.browseSelectGroup.buttonClicked[int].connect(self.toggleBrowser)
         self.browseModel = QtGui.QStandardItemModel()
         self.dbModel = QtGui.QStandardItemModel()
@@ -167,6 +176,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.sampleView.customContextMenuRequested.connect(self.sampleContextMenu)
         self.sampleView.fileReadable.connect(self.setIndexReadable)
 
+        self.waveView.setHoverText('Click anywhere while playing to skip to the selected position')
+        self.statusBar.addHoverWidget(self.waveView)
         self.waveScene = self.waveView.scene()
         self.waveView.mousePressEvent = self.waveViewMousePressEvent
         self.waveView.stop.connect(self.player.stop)
@@ -182,6 +193,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.browsePathLbl = EllipsisLabel()
         self.filterStackedLayout.addWidget(self.browsePathLbl)
         self.filterWidget = MainFilterWidget()
+        self.statusBar.addHoverWidget(self.filterWidget)
         self.filterWidget.filtersChanged.connect(self.dbProxyModel.setFilterData)
         self.filterStackedLayout.addWidget(self.filterWidget)
 
@@ -254,11 +266,10 @@ class SampleBrowse(QtWidgets.QMainWindow):
             browseRefresh = True
             self.browseDb(refresh=True)
         self.browse(refresh=browseRefresh, dbRefresh=dbRefresh)
-        if self.settings.value('dbBackup', True, type=bool):
-            self.dbBackupTimer.setInterval(self.settings.value('dbBackupInterval', 5, type=int) * 60000)
-            self.dbBackupTimer.start()
-        else:
-            self.dbBackupTimer.stop()
+        self.sampleDb.setBackup(
+            self.settings.value('dbBackup', True, type=bool), 
+            self.settings.value('dbBackupInterval', 5, type=int) * 60000, 
+            )
 
     def showStats(self):
         StatsDialog(self).exec_()
@@ -432,7 +443,13 @@ class SampleBrowse(QtWidgets.QMainWindow):
         menu.addActions([addDirAction, utils.menuSeparator(menu), scanAction])
         res = menu.exec_(self.fsView.mapToGlobal(pos))
         if res == addDirAction:
-            dirLabelItem = QtGui.QStandardItem(dirIndex.data())
+            favName = dirIndex.data()
+            favNameBase = favName
+            favNameAltId = 0
+            while self.favouritesModel.match(self.favouritesModel.index(0, 0), QtCore.Qt.DisplayRole, favName, flags=QtCore.Qt.MatchExactly):
+                favNameAltId += 1
+                favName = '{} ({})'.format(favNameBase, favNameAltId)
+            dirLabelItem = QtGui.QStandardItem(favName)
             dirPathItem = QtGui.QStandardItem(QtCore.QDir.toNativeSeparators(dirPath))
             dirPathItem.setData(dirPath, FilePathRole)
             dirPathItem.setFlags(dirPathItem.flags() ^ QtCore.Qt.ItemIsEditable)
@@ -440,8 +457,9 @@ class SampleBrowse(QtWidgets.QMainWindow):
             self.favouritesModel.appendRow([dirLabelItem, dirPathItem])
             self.favouritesModel.dataChanged.connect(self.favouritesDataChanged)
             self.settings.beginGroup('Favourites')
-            self.settings.setValue(dirIndex.data(), dirPath)
+            self.settings.setValue(favName, dirPath)
             self.settings.endGroup()
+            self.statusBar.addMessage(StatusFavAdded, favName)
         elif res == scanAction:
             self.sampleScan(dirPath)
 
@@ -505,6 +523,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             QtWidgets.QTableView.mousePressEvent(self.favouritesTable, event)
             return
         dirPathIndex = index.sibling(index.row(), 1)
+        favName = index.sibling(index.row(), 0).data()
         dirPath = dirPathIndex.data(FilePathRole)
         if event.button() != QtCore.Qt.RightButton:
             if QtCore.QDir().exists(dirPath):
@@ -536,6 +555,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                     break
             self.favouritesModel.takeRow(index.row())
             self.settings.endGroup()
+            self.statusBar.addMessage(StatusFavRemoved, favName)
 
 #    def favouritesToggle(self, *args):
 #        visible = not self.favouritesTable.isVisible()
@@ -678,8 +698,10 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 utils.setBold(fileIndex, False)
                 self.sampleDbUpdated = True
             self.dbDirModel.updateTree()
+            self.statusBar.addMessage(StatusSamplesRemoved, 1)
         elif res == editTagsAction:
             self.editTags(fileIndex.sibling(fileIndex.row(), tagsColumn))
+            self.statusBar.addMessage(StatusSamplesTagsEdited, 1)
 
     def multiSampleContextMenu(self, pos):
         new = []
@@ -749,6 +771,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 self.sampleDb.execute('UPDATE samples SET tags=? WHERE filePath=?', (','.join(res), filePath))
             self.reloadTags()
             self.sampleDb.commit()
+            self.statusBar.addMessage(StatusSamplesTagsEdited, len(fileList))
         elif res == removeAllAction:
             if RemoveSamplesDialog(self, exist).exec_():
                 fileNames = [i.data(FilePathRole) for i in exist]
@@ -772,6 +795,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                     self.sampleDbUpdated = True
                 self.reloadTags()
                 self.dbDirModel.updateTree()
+                self.statusBar.addMessage(StatusSamplesRemoved, len(fileNames))
 
     def addSampleGroupToDb(self, fileIndexes, tags=''):
         for fileIndex in fileIndexes:
@@ -782,6 +806,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.sampleDb.commit()
         self.reloadTags()
         self.dbDirModel.updateTree()
+        self.statusBar.addMessage(StatusSamplesAdded, len(fileIndexes))
 #        if self.sampleView.model() == self.browseModel:
 #            self.sampleDbUpdated = True
 #        else:
@@ -927,6 +952,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             fileIndex = sampleMatch[0]
             tagsIndex = fileIndex.sibling(fileIndex.row(), tagsColumn)
             self.dbModel.setData(tagsIndex, sorted(newTags), TagsRole)
+        self.statusBar.addMessage(StatusTagRenamed, newTag, oldTag)
 
     def renameTag(self, index):
         changing = self.dbTreeView.edit(index, self.dbTreeView.AllEditTriggers, QtCore.QEvent(QtCore.QEvent.None_))
@@ -978,6 +1004,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                     pass
                 self.sampleDb.commit()
                 self.dbTreeModel.itemFromIndex(index.parent()).takeRow(index.row())
+                self.statusBar.addMessage(StatusTagRemoved, currentTag)
 
     def reloadTags(self):
         self.sampleDb.execute('SELECT tags FROM samples')

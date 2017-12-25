@@ -1,3 +1,4 @@
+from samplebrowsesrc.widgets.statusbar import *
 from samplebrowsesrc.widgets.waveview import *
 from samplebrowsesrc.widgets.sampleview import *
 from samplebrowsesrc.widgets.ellipsislabel import *

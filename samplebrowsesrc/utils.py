@@ -62,3 +62,31 @@ def menuSeparator(parent):
     sep = QtWidgets.QAction(parent)
     sep.setSeparator(True)
     return sep
+
+def HoverDecorator(QtClass):
+    '''
+    Special QWidget decorator for mouse over "tooltip" in statusbar
+    '''
+
+    class HoverWidget(QtClass):
+        hoverMessage = QtCore.pyqtSignal(str)
+
+        def __init__(self, hoverText=None, *args, **kwargs):
+            self.hoverText = hoverText
+            QtClass.__init__(self, *args, **kwargs)
+
+        def setHoverText(self, text):
+            self.hoverText = text
+
+        def enterEvent(self, event):
+            if self.isEnabled():
+                self.hoverMessage.emit(self.hoverText)
+            QtClass.enterEvent(self, event)
+
+        def leaveEvent(self, event):
+            self.hoverMessage.emit('')
+            QtClass.leaveEvent(self, event)
+
+    return HoverWidget
+
+

@@ -1,9 +1,10 @@
 import soundfile
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from samplebrowsesrc.utils import *
+from samplebrowsesrc.utils import HoverDecorator, sizeStr
 from samplebrowsesrc.constants import *
 
+@HoverDecorator
 class SampleView(QtWidgets.QTableView):
     fileReadable = QtCore.pyqtSignal(object, bool)
 

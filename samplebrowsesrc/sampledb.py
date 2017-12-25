@@ -78,6 +78,13 @@ class SampleDb(QtCore.QObject):
         self.dbConn.commit()
         return True
 
+    def setBackup(self, state, interval=300000):
+        self.dbBackupTimer.setInterval(interval)
+        if not state:
+            self.dbBackupTimer.stop()
+        else:
+            self.dbBackupTimer.start()
+
     def loadDb(self, dbFile):
         if isinstance(dbFile, str):
             dbFile = QtCore.QFileInfo(dbFile)

@@ -31,9 +31,9 @@ class DropTimer(QtCore.QTimer):
 class DbTreeView(TreeViewWithLines):
     samplesAddedToTag = QtCore.pyqtSignal(object, str)
     samplesImported = QtCore.pyqtSignal(object, object)
-    def __init__(self, main, *args, **kwargs):
+    def __init__(self, parent, *args, **kwargs):
         QtWidgets.QTreeView.__init__(self, *args, **kwargs)
-        self.main = main
+        self.main = parent
         self.setAcceptDrops(True)
         #something is wrong with setAutoExpandDelay, we use a custom QTimer
         self.dropTimer = QtCore.QTimer()

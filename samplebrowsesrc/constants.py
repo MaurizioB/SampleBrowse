@@ -74,11 +74,17 @@ WaveRole = InfoRole + 1
 TagsRole = WaveRole + 1
 PreviewRole = TagsRole + 1
 
-StatusBackup, StatusSamplesAdded, StatusSamplesRemoved, StatusTagRenamed, StatusTagChanged = range(5)
+StatusBackup, StatusSamplesAdded, StatusSamplesRemoved, StatusSamplesTagsEdited, \
+    StatusTagRenamed, StatusTagChanged, StatusTagRemoved, StatusFavAdded, StatusFavRemoved = range(9)
+
 StatusDict = {
     StatusBackup: lambda done: 'Backup completed.' if done else 'Backup failed!', 
     StatusSamplesAdded: lambda n: '{} sample{} added to database'.format(n, 's' if n>1 else ''), 
     StatusSamplesRemoved: lambda n: '{} sample{} removed from database'.format(n, 's' if n>1 else ''), 
+    StatusSamplesTagsEdited: lambda n: 'Tags edited for {} sample{}'.format(n, 's' if n>1 else ''), 
     StatusTagRenamed: lambda new, old: 'Tag "{}" renamed to "{}"'.format(old, new), 
     StatusTagChanged: lambda tag: 'Tag "{}" changed'.format(tag), 
+    StatusTagRemoved: lambda tag: 'Tag "{}" removed'.format(tag), 
+    StatusFavAdded: lambda fav: 'Favourite "{}" created'.format(fav), 
+    StatusFavRemoved: lambda fav: 'Favourite "{}" removed'.format(fav), 
     }
