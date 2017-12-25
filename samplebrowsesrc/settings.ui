@@ -214,6 +214,9 @@
          </item>
          <item>
           <widget class="QSpinBox" name="dbBackupSpin">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
            <property name="sizePolicy">
             <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
              <horstretch>0</horstretch>
@@ -358,8 +361,8 @@
    <slot>accept()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>161</x>
-     <y>231</y>
+     <x>167</x>
+     <y>300</y>
     </hint>
     <hint type="destinationlabel">
      <x>161</x>
@@ -374,8 +377,8 @@
    <slot>reject()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>161</x>
-     <y>231</y>
+     <x>167</x>
+     <y>300</y>
     </hint>
     <hint type="destinationlabel">
      <x>161</x>
@@ -390,12 +393,28 @@
    <slot>setEnabled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>191</x>
-     <y>119</y>
+     <x>72</x>
+     <y>54</y>
     </hint>
     <hint type="destinationlabel">
-     <x>255</x>
-     <y>119</y>
+     <x>103</x>
+     <y>54</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>dbBackupChk</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>dbBackupSpin</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>151</x>
+     <y>66</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>271</x>
+     <y>63</y>
     </hint>
    </hints>
   </connection>

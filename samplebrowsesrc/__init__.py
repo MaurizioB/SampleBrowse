@@ -1197,6 +1197,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.waveScene.movePlayhead(self.player.output.processedUSecs() / 1000000)
 
     def stopped(self):
+        self.waveScene.cursorPlayhead.hide()
         if self.currentSampleIndex:
             model = self.currentSampleIndex.model()
             model.itemFromIndex(self.currentSampleIndex).setData(QtGui.QIcon.fromTheme('media-playback-start'), QtCore.Qt.DecorationRole)
