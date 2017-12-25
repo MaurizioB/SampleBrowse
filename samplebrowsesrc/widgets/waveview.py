@@ -18,8 +18,10 @@ class WaveScene(QtWidgets.QGraphicsScene):
     wavePen = QtGui.QPen(QtCore.Qt.NoPen)
     zeroPen = QtGui.QPen(QtCore.Qt.darkGray, .5)
     zeroPen.setCosmetic(True)
-    playheadPen = QtGui.QPen(QtCore.Qt.black, .5)
+    playheadPen = QtGui.QPen(QtCore.Qt.red, .5)
     playheadPen.setCosmetic(True)
+    cursorPlayheadPen = QtGui.QPen(QtCore.Qt.black, .5)
+    cursorPlayheadPen.setCosmetic(True)
 
     def __init__(self, *args, **kwargs):
         QtWidgets.QGraphicsScene.__init__(self, *args, **kwargs)
@@ -30,6 +32,13 @@ class WaveScene(QtWidgets.QGraphicsScene):
 
     def setPlayheadDeltaPos(self, pos):
         self.deltaPos += pos - self.playhead.x()
+
+    def setCursorPlayheadPos(self, pos):
+        if pos < 0:
+            pos = 0
+        elif pos > self.sceneRect().width():
+            pos = self.sceneRect().width()
+        self.cursorPlayhead.setX(pos)
 
     def showPlayhead(self):
         self.playhead.show()
@@ -50,6 +59,8 @@ class WaveScene(QtWidgets.QGraphicsScene):
     def drawWave(self, waveData, width):
         self.deltaPos = 0
         self.clear()
+        self.cursorPlayhead = self.addLine(0, -100, 0, 100, self.cursorPlayheadPen)
+        self.cursorPlayhead.hide()
         self.playhead = self.addLine(0, -100, 0, 100, self.playheadPen)
         self.playhead.setZValue(100)
 

@@ -180,6 +180,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.statusBar.addHoverWidget(self.waveView)
         self.waveScene = self.waveView.scene()
         self.waveView.mousePressEvent = self.waveViewMousePressEvent
+        self.waveView.mouseMoveEvent = self.waveViewMouseMoveEvent
+        self.waveView.mouseReleaseEvent = self.waveViewMouseReleaseEvent
         self.waveView.stop.connect(self.player.stop)
         self.waveView.toggle.connect(self.waveViewToggle)
         self.player.stopped.connect(self.waveView.stopped)
@@ -226,11 +228,34 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.doMenu()
 
     def waveViewMousePressEvent(self, event):
-        if self.player.isPlaying():
+        if not self.player.isActive():
+            return
+        pos = self.waveView.mapToScene(event.pos()).x()
+        self.waveScene.cursorPlayhead.show()
+        self.waveScene.setCursorPlayheadPos(pos)
+        QtWidgets.QGraphicsView.mousePressEvent(self.waveView, event)
+
+    def waveViewMouseMoveEvent(self, event):
+        if not self.player.isActive():
+            return
+        pos = self.waveView.mapToScene(event.pos()).x()
+        self.waveScene.setCursorPlayheadPos(pos)
+        QtWidgets.QGraphicsView.mouseMoveEvent(self.waveView, event)
+
+    def waveViewMouseReleaseEvent(self, event):
+        self.waveScene.cursorPlayhead.hide()
+        if self.player.isActive():
             pos = self.waveView.mapToScene(event.pos()).x()
+            if pos >= self.waveScene.sceneRect().width():
+                self.player.stop()
+                return
+            if pos < 0:
+                pos = 0
             self.player.seekPos(pos / self.waveScene.sceneRect().width())
             self.waveScene.setPlayheadDeltaPos(pos)
-        QtWidgets.QGraphicsView.mousePressEvent(self.waveView, event)
+            if self.player.isPaused():
+                self.player.output.resume()
+        QtWidgets.QGraphicsView.mouseReleaseEvent(self.waveView, event)
 
     def doMenu(self):
         self.fileMenu.addAction('Show database statistics...', self.showStats)
@@ -372,7 +397,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
 
     def sampleViewKeyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Space:
-            if not self.player.isPlaying():
+            if not self.player.isActive():
                 if self.sampleView.currentIndex().isValid():
                     self.play(self.sampleView.currentIndex())
                     self.sampleView.setCurrentIndex(self.sampleView.currentIndex())
@@ -879,7 +904,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         self.sampleView.resizeRowsToContents()
 
     def sampleViewDoubleClicked(self, index):
-        if not self.player.isPlaying() and index.column() not in (0, tagsColumn):
+        if not self.player.isActive() and index.column() not in (0, tagsColumn):
             self.play(index)
 
     def editTags(self, index):
@@ -1128,7 +1153,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         elif self.player.isPlaying():
             self.player.output.suspend()
         else:
-            if self.player.output.state() == QtMultimedia.QAudio.SuspendedState:
+            if self.player.isPaused():
                 self.player.output.resume()
             else:
                 self.play(self.currentShownSampleIndex)
@@ -1138,7 +1163,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
             self.player.stop()
             return
         fileIndex = index.sibling(index.row(), 0)
-        if self.currentSampleIndex and self.currentSampleIndex == fileIndex and self.player.isPlaying():
+        if self.currentSampleIndex and self.currentSampleIndex == fileIndex and self.player.isActive():
             self.player.stop()
         else:
             self.play(index)
@@ -1214,7 +1239,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
         if self.currentShownSampleIndex and self.currentShownSampleIndex == index:
             return True
         fileIndex = index.sibling(index.row(), 0)
-        if self.player.isPlaying() and self.currentSampleIndex and self.currentSampleIndex != fileIndex:
+        if self.player.isActive() and self.currentSampleIndex and self.currentSampleIndex != fileIndex:
             self.play(fileIndex)
 #            self.player.stop()
         info = fileIndex.data(InfoRole)

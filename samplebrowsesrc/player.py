@@ -143,7 +143,13 @@ class Player(QtCore.QObject):
         self.output.stateChanged.connect(self.stateChanged)
 
     def isPlaying(self):
-        return True if self.output.state() in (QtMultimedia.QAudio.ActiveState, QtMultimedia.QAudio.SuspendedState) else False
+        return self.output.state() == QtMultimedia.QAudio.ActiveState
+
+    def isPaused(self):
+        return self.output.state() == QtMultimedia.QAudio.SuspendedState
+
+    def isActive(self):
+        return self.output.state() in (QtMultimedia.QAudio.ActiveState, QtMultimedia.QAudio.SuspendedState)
 
     def stateChanged(self, state):
         if state in (QtMultimedia.QAudio.StoppedState, QtMultimedia.QAudio.IdleState):
