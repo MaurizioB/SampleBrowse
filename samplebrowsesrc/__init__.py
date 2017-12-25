@@ -105,6 +105,8 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 self.sampleDb.loadDb(dbFilePath)
         if dbPathMode in (2, 3):
             self.settings.setValue('dbPath', dbFilePath)
+        else:
+            self.settings.remove('dbPath')
         self.tagColorsDict = self.sampleDb.tagColorsDict
 
         self.dbSplitter = AdvancedSplitter(QtCore.Qt.Vertical)
