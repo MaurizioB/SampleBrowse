@@ -97,15 +97,15 @@ class SampleBrowse(QtWidgets.QMainWindow):
         dbPathMode = 0
         while not self.sampleDb.initialized:
             dbSelectDialog = DbSelectDialog(self, dbPathMode)
-            dbPathMode, dbFilePath = dbSelectDialog.exec_()
+            dbPathMode, dbFile = dbSelectDialog.exec_()
             if dbSelectDialog.state == dbSelectDialog.dbOk:
-                self.sampleDb.loadDb(dbFilePath)
+                self.sampleDb.loadDb(dbFile)
             elif dbSelectDialog.state == dbSelectDialog.dbWillCreate:
-                self.sampleDb.createDb(dbFilePath)
-                self.sampleDb.loadDb(dbFilePath)
+                self.sampleDb.createDb(dbFile)
+                self.sampleDb.loadDb(dbFile)
             if self.sampleDb.initialized:
                 if dbPathMode in (2, 3):
-                    self.settings.setValue('dbPath', dbFilePath)
+                    self.settings.setValue('dbPath', dbFile.toNativeSeparators())
                 else:
                     self.settings.remove('dbPath')
                 break

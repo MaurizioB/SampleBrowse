@@ -150,4 +150,11 @@ class DbSelectDialog(QtWidgets.QDialog):
 
     def exec_(self):
         QtWidgets.QDialog.exec_(self)
-        return self.dbPathCombo.currentIndex(), self.dbPathEdit.text()
+        if self.dbPathCombo.currentIndex() == 0:
+            return 0, self.getDefaults()[1]
+        elif self.dbPathCombo.currentIndex() == 1:
+            return 1, self.tempDbFilePath
+        elif self.dbPathCombo.currentIndex() == 2:
+            return 2, self.customDbFilePath
+        else:
+            return 3, self.existingDbFilePath
