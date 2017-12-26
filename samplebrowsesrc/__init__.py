@@ -105,7 +105,7 @@ class SampleBrowse(QtWidgets.QMainWindow):
                 self.sampleDb.loadDb(dbFile)
             if self.sampleDb.initialized:
                 if dbPathMode in (2, 3):
-                    self.settings.setValue('dbPath', QtCore.QDirtoNativeSeparators(dbFile.absoluteFilePath()))
+                    self.settings.setValue('dbPath', QtCore.QDir.toNativeSeparators(dbFile.absoluteFilePath()))
                 else:
                     self.settings.remove('dbPath')
                 break
