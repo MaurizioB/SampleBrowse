@@ -46,7 +46,7 @@ var
   sUnInstallString: string;
 begin
   Result := True; // in case when no previous version is found
-  if RegValueExists(HKLM,'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppID}_is1', 'UninstallString') then  //Your App GUID/ID
+  if RegValueExists(HKLM,'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppID}}_is1', 'UninstallString') then  //Your App GUID/ID
   begin
     V := MsgBox(ExpandConstant('It seems like SampleBrowse is already installed. Uninstall is required before installing the new version. Proceed?'), mbInformation, MB_YESNO); //Custom Message if App installed
     if V = IDYES then
@@ -65,7 +65,7 @@ end;
 SourceDir=..\
 AppId={{#MyAppID}}
 AppName={#MyAppName}
-AppVersion={#MyAppVersion}}
+AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
